@@ -8,25 +8,30 @@ import { serve } from './server.mjs';
 import { launch } from './browser.mjs';
 import { ROUTE } from './route.mjs';
 
+const argv = process.argv.slice(2); const opt = {}; for (let i = 0; i < argv.length; i++) if (argv[i].startsWith('--')) opt[argv[i].slice(2)] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : '1';
+// --extra "dev=dev/trainServiceTest&skip=trainService"  --steps board-jubilee,ride-jubilee   --list
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (opt.list) { console.log(ROUTE.map(s => s.name).join('\n')); process.exit(0); }
+const steps = opt.steps ? ROUTE.filter(s => opt.steps.split(',').includes(s.name)) : ROUTE;
 const outdir = path.join(root, 'test', 'out'); fs.mkdirSync(outdir, { recursive: true });
 const { port, close } = await serve(root);
 const { page, logs, close: closeBrowser } = await launch({ width: 1280, height: 720 });
 let failed = false;
 try {
   const t0 = Date.now();
-  await page.goto(`http://127.0.0.1:${port}/index.html?autostart=1&mute=1`);
+  await page.goto(`http://127.0.0.1:${port}/index.html?autostart=1&mute=1${opt.extra ? '&' + opt.extra : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.ready, null, { timeout: 300000 });
   console.log(`booted in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   await page.waitForTimeout(1500);
   const built = await page.evaluate(() => Object.keys(window.__app.built)); console.log('built modules:', built.join(', '));
-  for (const step of ROUTE) {
+  for (const step of steps) {
     await page.evaluate(([x, y, z, yaw, pitch]) => window.__app.teleport(x, y, z, yaw, pitch), [step.x, step.y, step.z, step.yaw, step.pitch ?? 0]);
     await page.evaluate(() => window.__app.advance(0.5));
     if (step.advanceUntil) { // e.g. 'doorsOpen:jubileeUpper' — advance the simulation until that track's train is stopped with doors open
       const [what, key] = step.advanceUntil.split(':');
       const ok = await page.evaluate(([what, key]) => { const svc = window.__app.ctx.get('trainService'); if (!svc) return false; for (let i = 0; i < 400; i++) { const a = svc.lines[key] && svc.lines[key].active; if (a && what === 'doorsOpen' && a.state === 'stopped' && a.train.doorsOpen) return true; window.__app.advance(1); } return false; }, [what, key]);
       console.log(`  advanceUntil ${step.advanceUntil}: ${ok}`); if (!ok) failed = true;
+      await page.evaluate(() => window.__app.advance(3)); // let the doors finish opening
     }
     if (step.walk) { await page.keyboard.down('KeyW'); await page.evaluate(s => window.__app.advance(s), step.walk); await page.keyboard.up('KeyW'); await page.evaluate(() => window.__app.advance(0.2)); }
     if (step.advance) await page.evaluate(s => window.__app.advance(s), step.advance);

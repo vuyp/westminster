@@ -2,7 +2,7 @@
 // main.js — boots the station.
 // URL params: ?autostart=1 (skip start screen, no pointer lock — used by tests)
 //             ?pos=x,y,z&yaw=deg&pitch=deg   ?quality=low|high   ?mute=1
-//             ?skip=street,npcs   ?only=ticketHall   ?time=HH:MM
+//             ?skip=street,npcs   ?only=ticketHall   ?time=HH:MM   ?dev=dev/trainServiceTest (extra modules under src/, comma-separated)
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { createEngine } from './core/engine.js';
@@ -75,6 +75,7 @@ async function boot() {
   };
   await loadList(WORLD_MODULES, 'world');
   await loadList(SYSTEM_MODULES, 'system');
+  if (params.get('dev')) await loadList(params.get('dev').split(',').map(m => [m, `./${m}.js`]), 'dev');
 
   // fallback lighting if nothing created a sun / ambient (e.g. street module skipped)
   let hasLight = false; engine.scene.traverse(o => { if (o.isLight) hasLight = true; });

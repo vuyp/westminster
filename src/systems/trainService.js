@@ -31,7 +31,7 @@ const CIRCLE_VIA = { 'Edgware Road': 'via Tower Hill', 'Hammersmith': 'via Victo
 class TrainService {
   constructor(ctx, trainsMod, announcements) {
     this.ctx = ctx; this.trainsMod = trainsMod; this.ann = announcements;
-    this.listeners = {}; this.trains = []; this.lines = {}; this.time = 0; this._indicatorTimer = 0;
+    this.listeners = {}; this.trains = []; this.lines = {}; this.time = 0; this._indicatorTimer = 0; this._timers = [];
     this._rng = mulberry(12345);
     for (const [key, def] of Object.entries(TRACKS)) {
       const svc = SERVICES[key]; if (!svc) continue;
@@ -49,6 +49,10 @@ class TrainService {
   }
   _jitter(n) { return (this._rng() - 0.5) * 2 * n; }
   _pick(list) { const total = list.reduce((a, d) => a + d[1], 0); let r = this._rng() * total; for (const d of list) { r -= d[1]; if (r <= 0) return { name: d[0], line: d[2] }; } return { name: list[0][0], line: list[0][2] }; }
+
+  /** Schedule fn after `seconds` of SIMULATION time (not wall-clock), so headless tests with advance() stay deterministic. */
+  _schedule(seconds, fn) { this._timers.push({ at: this.time + seconds, fn }); }
+  _runTimers() { if (!this._timers.length) return; const due = this._timers.filter(t => t.at <= this.time); if (!due.length) return; this._timers = this._timers.filter(t => t.at > this.time); for (const t of due) { try { t.fn(); } catch (e) { console.error('[trainService timer]', e); } } }
 
   on(evt, fn) { (this.listeners[evt] = this.listeners[evt] || []).push(fn); return () => { const l = this.listeners[evt]; const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); }; }
   emit(evt, data) { for (const fn of (this.listeners[evt] || [])) { try { fn(data); } catch (e) { console.error('[trainService listener]', e); } } }
@@ -106,7 +110,7 @@ class TrainService {
   }
 
   update(dt) {
-    this.time += dt; const ctx = this.ctx;
+    this.time += dt; const ctx = this.ctx; this._runTimers();
     for (const line of Object.values(this.lines)) {
       // spawn when due
       if (!line.active && line.queue.length && this.time >= line.queue[0].at) { const item = line.queue.shift(); const last = line.queue.length ? line.queue[line.queue.length - 1].at : item.at; line.queue.push({ at: last + line.svc.headway + this._jitter(25), destination: this._pick(line.svc.destinations) }); this._spawn(line, item); }
@@ -137,21 +141,21 @@ class TrainService {
         if (!t.announced.doorsOpen && t.timer > 1.2) {
           t.announced.doorsOpen = true; tr.setDoors(true, { side: t.line.doorSide });
           const peds = t.line.pedsKey && this.ctx.get(t.line.pedsKey); if (peds && peds.setOpen) peds.setOpen(true);
-          setTimeout(() => { if (t.state === 'stopped') this._setBlockers(t, true); }, spec.doorTime * 1000 + 100);
+          this._schedule(spec.doorTime + 0.1, () => { if (t.state === 'stopped') this._setBlockers(t, true); });
           this.emit('doorsOpen', this._evt(t));
-          if (!t.announced.stopped) { t.announced.stopped = true; setTimeout(() => this._announceOnTrain(t, 'stopped'), 2500); }
+          if (!t.announced.stopped) { t.announced.stopped = true; this._schedule(2.5, () => this._announceOnTrain(t, 'stopped')); }
         }
         const closeAt = 1.2 + spec.dwell;
         if (!t.announced.closing && t.timer > closeAt - 4.5) { t.announced.closing = true; this.ctx.audio.play(spec.chime, { object: tr.group, gain: 0.55, refDistance: 6, maxDistance: 50, params: { seconds: 2.6 } }); this._announceOnTrain(t, 'doorsClosing', { display: 'Please stand clear of the doors' }); this.emit('doorsClosing', this._evt(t)); }
         if (!t.announced.closed && t.timer > closeAt) {
           t.announced.closed = true; tr.setDoors(false, { side: t.line.doorSide });
           const peds = t.line.pedsKey && this.ctx.get(t.line.pedsKey); if (peds && peds.setOpen) peds.setOpen(false);
-          setTimeout(() => { if (t.state === 'stopped') this._setBlockers(t, true); }, spec.doorTime * 1000 + 100);
+          this._schedule(spec.doorTime + 0.1, () => { if (t.state === 'stopped') this._setBlockers(t, true); });
         }
         if (t.announced.closed && t.timer > closeAt + spec.doorTime + 2.0) {
           // a passenger who is still in a doorway when the doors close stays aboard (attached); proceed
           t.state = 'departing'; t.timer = 0; this._setBlockers(t, false); this.emit('departing', this._evt(t));
-          setTimeout(() => this._announceOnTrain(t, 'departing'), 6000);
+          this._schedule(6, () => this._announceOnTrain(t, 'departing'));
         }
         break;
       }
@@ -181,7 +185,7 @@ class TrainService {
     const next = NEXT_STATION[t.line.key] && NEXT_STATION[t.line.key](t.destination.name);
     t.nextStation = next;
     this.ctx.hud && this.ctx.hud.notice(`Travelling towards ${next || t.destination.name}…`, 5);
-    setTimeout(() => { if (t.state === 'riding') this.ctx.audio.announce(`The next station is ${next}.`, { voice: 'train', priority: 2 }); }, 4000);
+    this._schedule(4, () => { if (t.state === 'riding') this.ctx.audio.announce(`The next station is ${next}.`, { voice: 'train', priority: 2 }); });
     this.emit('gone', this._evt(t)); t.line.active = null;
   }
   _updateRide(t, dt) {
@@ -277,9 +281,20 @@ export function makePlaceholderTrain(ctx, spec) {
     },
     setDoors(open) { target = open ? 1 : 0; train.doorsOpen = open; ctx.audio.play('doorMove', { object: g, gain: 0.6, params: { seconds: spec.doorTime, closing: !open }, refDistance: 4, maxDistance: 40 }); },
     setDisplay() {}, setDestination() {}, setSpeed() {},
-    exteriorBoxes() { const out = []; for (const c of cars) { const b = new THREE.Box3(new THREE.Vector3(-spec.width / 2, 0, -c.len / 2), new THREE.Vector3(spec.width / 2, spec.height, c.len / 2)); b.applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0, c.zc)).applyMatrix4(g.matrixWorld); out.push(b); } return out; },
+    exteriorBoxes() {
+      // car bodies as world AABBs; when the doors are open, leave gaps at the doorways so passengers can board
+      const out = []; g.updateMatrixWorld(true);
+      for (let i = 0; i < cars.length; i++) {
+        const c = cars[i]; const dws = (spec.doorwaysDM && (i === 0 || i === spec.cars - 1)) ? spec.doorwaysDM : spec.doorways;
+        const segs = [];
+        if (!train.doorsOpen) segs.push([-c.len / 2, c.len / 2]);
+        else { let z0 = -c.len / 2; const gaps = dws.map(d => [-d.offset - d.width / 2 - 0.1, -d.offset + d.width / 2 + 0.1]).sort((a, b) => a[0] - b[0]); for (const [ga, gb] of gaps) { if (ga > z0) segs.push([z0, ga]); z0 = Math.max(z0, gb); } if (z0 < c.len / 2) segs.push([z0, c.len / 2]); }
+        for (const [za, zb] of segs) { const b = new THREE.Box3(new THREE.Vector3(-spec.width / 2, 0, za + c.zc), new THREE.Vector3(spec.width / 2, spec.height, zb + c.zc)); b.applyMatrix4(g.matrixWorld); out.push(b); }
+      }
+      return out;
+    },
     placeAlong(track, s) { const f = track.frameAt(s); g.position.copy(f.position); g.quaternion.copy(f.quaternion); g.updateMatrixWorld(true); },
-    update(dt) { doorT += (target - doorT) * Math.min(1, dt * (2 / spec.doorTime) * 2); for (const d of doorLeaves) d.mesh.position.z = d.base + (d.mesh.userData.dir || (d.mesh.userData.dir = Math.random() < 0.5 ? -1 : 1)) * doorT * d.width * 0.9 * 0; },
+    update(dt) { doorT += (target - doorT) * Math.min(1, dt * (2 / spec.doorTime) * 2); for (const d of doorLeaves) d.mesh.visible = doorT < 0.85; },
     dispose() {},
   };
   return train;
