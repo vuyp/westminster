@@ -168,7 +168,7 @@ export class Player {
     if (this.train) z = ZONES[0];
     else {
       const p = this.pos; const py = p.y + 1.0;
-      for (const zone of ZONES) { if (!zone.box) { z = zone; break; } const b = zone.box; if (p.x >= b.xMin && p.x <= b.xMax && p.z >= b.zMin && p.z <= b.zMax && py >= b.yMin && py <= b.yMax) { z = zone; break; } }
+      for (const zone of ZONES) { if (zone.id === 'train') continue; if (!zone.box) { z = zone; break; } const b = zone.box; if (p.x >= b.xMin && p.x <= b.xMax && p.z >= b.zMin && p.z <= b.zMax && py >= b.yMin && py <= b.yMax) { z = zone; break; } }
     }
     if (z !== this.zone) { this.zone = z; if (this.audio) this.audio.setZone(z.reverb); if (this.hud) this.hud.location(z.name); }
   }

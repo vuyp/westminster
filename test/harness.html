@@ -42,6 +42,7 @@ if (params.get('showBlockers') === '1') { const mat = new THREE.MeshBasicMateria
 function setView(pos, look, fov) { engine.camera.position.set(...pos); engine.camera.lookAt(new THREE.Vector3(...look)); if (fov) { engine.camera.fov = fov; engine.camera.updateProjectionMatrix(); } ctx.player.pos.set(pos[0], pos[1] - 1.6, pos[2]); }
 app.setView = setView;
 if (params.get('pos')) setView(params.get('pos').split(',').map(Number), (params.get('look') || '0,1.6,-10').split(',').map(Number), Number(params.get('fov') || 0) || null);
+app.advance = (seconds, step = 1 / 30) => { let t = 0; while (t < seconds) { const dt = Math.min(step, seconds - t); ctx._update(dt, engine.clock.getElapsedTime() + t); t += dt; } };
 app.stats = () => ({ calls: engine.renderer.info.render.calls, triangles: engine.renderer.info.render.triangles, lights: ctx.lights.count, floors: collision.floors.length, blockers: collision.blockers.length });
 let last = performance.now(); let frames = 0;
 function frame() { requestAnimationFrame(frame); const now = performance.now(); const dt = Math.min(0.1, (now - last) / 1000); last = now; ctx._update(dt, engine.clock.getElapsedTime()); engine.render(); frames++; app.frames = frames; }

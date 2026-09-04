@@ -86,6 +86,8 @@ async function boot() {
   app.teleport = (x, y, z, yaw, pitch) => player.teleport(x, y, z, yaw, pitch);
   app.stats = () => ({ calls: engine.renderer.info.render.calls, triangles: engine.renderer.info.render.triangles, lights: ctx.lights.count, geometries: engine.renderer.info.memory.geometries, textures: engine.renderer.info.memory.textures, floors: collision.floors.length, blockers: collision.blockers.length, emitters: audio.emitters.length });
   app.frameTimes = [];
+  /** Deterministically advance the simulation by `seconds` (used by tests; no rendering). */
+  app.advance = (seconds, step = 1 / 30) => { let t = 0; while (t < seconds) { const dt = Math.min(step, seconds - t); player.update(dt); ctx._update(dt, engine.clock.getElapsedTime() + t); t += dt; } };
 
   hud.status('Ready.');
   hud.onStart(async () => { await audio.resume(); hud.hideStart(); player.requestLock(); });

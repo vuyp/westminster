@@ -129,12 +129,12 @@ export const BOX_WALKWAYS = [
 // Each is sampled as a CatmullRom curve. `stop` = distance along the track (m) where a train's CENTRE stops at the platform.
 export const TRACKS = {
   districtEB: {
-    points: [[-700, LEVELS.dcRail, 9.9], [-300, LEVELS.dcRail, 9.9], [-90, LEVELS.dcRail, 9.9], [60, LEVELS.dcRail, 9.9], [110, LEVELS.dcRail, 4], [150, LEVELS.dcRail, -30], [175, LEVELS.dcRail, -110], [180, LEVELS.dcRail, -700]],
+    points: [[-700, LEVELS.dcRail, 9.9], [-300, LEVELS.dcRail, 9.9], [-150, LEVELS.dcRail, 9.9], [-100, LEVELS.dcRail, 9.9], [-60, LEVELS.dcRail, 9.9], [-20, LEVELS.dcRail, 9.9], [20, LEVELS.dcRail, 9.9], [60, LEVELS.dcRail, 9.9], [90, LEVELS.dcRail, 9.9], [120, LEVELS.dcRail, 6], [150, LEVELS.dcRail, -8], [175, LEVELS.dcRail, -40], [185, LEVELS.dcRail, -110], [185, LEVELS.dcRail, -700]],
     platformCentre: [-9, LEVELS.dcRail, 9.9],
     platform: 1, line: 'district', direction: 'eastbound',
   },
   districtWB: {
-    points: [[180, LEVELS.dcRail, -700], [174, LEVELS.dcRail, -110], [148, LEVELS.dcRail, -30], [110, LEVELS.dcRail, 8.4], [60, LEVELS.dcRail, 14.3], [-90, LEVELS.dcRail, 14.3], [-300, LEVELS.dcRail, 14.3], [-700, LEVELS.dcRail, 14.3]],
+    points: [[181, LEVELS.dcRail, -700], [181, LEVELS.dcRail, -110], [171, LEVELS.dcRail, -40], [146, LEVELS.dcRail, -6], [118, LEVELS.dcRail, 10.5], [90, LEVELS.dcRail, 14.3], [60, LEVELS.dcRail, 14.3], [20, LEVELS.dcRail, 14.3], [-20, LEVELS.dcRail, 14.3], [-60, LEVELS.dcRail, 14.3], [-100, LEVELS.dcRail, 14.3], [-150, LEVELS.dcRail, 14.3], [-300, LEVELS.dcRail, 14.3], [-700, LEVELS.dcRail, 14.3]],
     platformCentre: [-9, LEVELS.dcRail, 14.3],
     platform: 2, line: 'district', direction: 'westbound',
   },

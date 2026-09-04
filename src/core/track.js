@@ -30,10 +30,10 @@ export class Track {
     return this.curve.getTangentAt(u, target).normalize();
   }
 
-  /** Position + quaternion for an object whose local +Z axis points "backwards" along the track (i.e. Three.js forward = -Z). */
+  /** Position + quaternion for an object whose local -Z axis points FORWARD along the track (direction of increasing s); local +X is to the right of travel. */
   frameAt(s, target = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), tangent: new THREE.Vector3() }) {
     this.pointAt(s, target.position); this.tangentAt(s, target.tangent);
-    const m = new THREE.Matrix4().lookAt(new THREE.Vector3(0, 0, 0), target.tangent.clone().negate(), this._up);
+    const m = new THREE.Matrix4().lookAt(new THREE.Vector3(0, 0, 0), target.tangent, this._up);
     target.quaternion.setFromRotationMatrix(m);
     return target;
   }
