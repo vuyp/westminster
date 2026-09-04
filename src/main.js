@@ -95,11 +95,20 @@ async function boot() {
   hud.onStart(async () => { await audio.resume(); hud.hideStart(); player.requestLock(); });
   if (autostart) { hud.hideStart(); player.enabled = true; player.noLock = true; }
 
+  // adaptive quality: if frames are consistently slow, drop post-processing/shadows (Q toggles manually)
+  let slowFrames = 0, fastFrames = 0; const bootAt = performance.now();
+  window.addEventListener('keydown', e => { if (e.code === 'KeyQ') { const q = engine.state.quality === 'high' ? 'low' : 'high'; engine.setQuality(q); hud.notice(`Quality: ${q}`); } });
+  function adapt(frameMs) {
+    if (autostart || performance.now() - bootAt < 8000) return;
+    if (frameMs > 30) { slowFrames++; fastFrames = 0; } else { fastFrames++; if (fastFrames > 120) slowFrames = 0; }
+    if (slowFrames > 90 && engine.state.quality === 'high') { engine.setQuality('low'); hud.notice('Low frame rate — switched to low quality (press Q to change)', 5); slowFrames = 0; }
+  }
+
   // main loop
   let last = performance.now();
   function frame() {
     requestAnimationFrame(frame);
-    const now = performance.now(); const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    const now = performance.now(); const dt = Math.min(0.1, (now - last) / 1000); adapt(now - last); last = now;
     const elapsed = engine.clock.getElapsedTime();
     player.update(dt);
     ctx._update(dt, elapsed);
