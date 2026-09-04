@@ -14,4 +14,9 @@ export const ROUTE = [
   { name: 'district-p1', x: -9, y: LEVELS.dcPlatform, z: 5.5, yaw: 90, pitch: 0, expectZone: 'dcPlatform1', expectY: LEVELS.dcPlatform },
   { name: 'district-p2', x: -9, y: LEVELS.dcPlatform, z: 18.5, yaw: -90, pitch: 0, expectZone: 'dcPlatform2', expectY: LEVELS.dcPlatform },
   { name: 'exit1-big-ben', x: 6, y: 0, z: 33, yaw: 200, pitch: 25, expectZone: 'street' },
+  // Board a Jubilee train: stand on the upper platform facing the track, wait for a train with open doors, walk in.
+  { name: 'board-jubilee', x: -35.5, y: LEVELS.jubUpper, z: -79.5, yaw: 90, pitch: 0, advanceUntil: 'doorsOpen:jubileeUpper', walk: 2.2, expectTrain: true },
+  { name: 'ride-jubilee', x: -35.5, y: LEVELS.jubUpper, z: -79.5, yaw: 90, pitch: 0, advanceUntil: 'doorsOpen:jubileeUpper', walk: 2.2, advance: 45, expectTrain: true },
+  // Board a District train from platform 1 (train is to the south of the platform)
+  { name: 'board-district', x: -9, y: LEVELS.dcPlatform, z: 6.5, yaw: 180, pitch: 0, advanceUntil: 'doorsOpen:districtEB', walk: 2.4, expectTrain: true },
 ];

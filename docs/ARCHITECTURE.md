@@ -117,6 +117,11 @@ const esc = createEscalator(ctx, { top: {x,y,z}, bottom: {x,y,z}, dir: 'down'|'u
 A train object must provide:
 ```js
 train.group            // THREE.Group placed by the train service each frame (position + quaternion from Track.frameAt)
+                       // LOCAL FRAME: -Z is FORWARD (direction of travel = increasing s along the track), +X is to the RIGHT of
+                       // travel, +Y up, origin at rail-head height at the train's centre. Cars are laid out along Z with the
+                       // front car at negative z. trainSpec.doorPositions() gives door centres as s-offsets (+ = towards the
+                       // front), so a door at offset d sits at local z = -d. Train.placeAlong(track, s) positions the group
+                       // at track.frameAt(s) and each car at its own frame (frameAt(s + carOffset)) so trains follow curves.
 train.stock            // '1996' | 'S7'
 train.floorY           // interior floor height in group-local coordinates (metres above the rail head)
 train.interiorContains(localPos)                   // bool — point (group-local) is inside a car's saloon
@@ -130,6 +135,9 @@ train.exteriorBoxes()  // [Box3 in WORLD space] — car bodies (minus open doorw
 ```
 The train service attaches the player (`ctx.player.attachTrain(train)`) when they walk through an open doorway into the saloon,
 and the player detaches themself when `resolveInterior` reports `exited`.
+
+The service calls `train.setDoors(true, { side })` where `side` is the platform side relative to travel:
+Jubilee upper (northbound in world terms) → 'right'; Jubilee lower → 'left'; District eastbound → 'left'; District westbound → 'left'.
 
 ### Train service — `src/systems/trainService.js`
 ```js

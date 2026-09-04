@@ -22,13 +22,22 @@ try {
   const built = await page.evaluate(() => Object.keys(window.__app.built)); console.log('built modules:', built.join(', '));
   for (const step of ROUTE) {
     await page.evaluate(([x, y, z, yaw, pitch]) => window.__app.teleport(x, y, z, yaw, pitch), [step.x, step.y, step.z, step.yaw, step.pitch ?? 0]);
-    await page.waitForTimeout(500);
-    if (step.walk) { await page.keyboard.down('KeyW'); await page.waitForTimeout(step.walk * 1000); await page.keyboard.up('KeyW'); await page.waitForTimeout(200); }
+    await page.evaluate(() => window.__app.advance(0.5));
+    if (step.advanceUntil) { // e.g. 'doorsOpen:jubileeUpper' — advance the simulation until that track's train is stopped with doors open
+      const [what, key] = step.advanceUntil.split(':');
+      const ok = await page.evaluate(([what, key]) => { const svc = window.__app.ctx.get('trainService'); if (!svc) return false; for (let i = 0; i < 400; i++) { const a = svc.lines[key] && svc.lines[key].active; if (a && what === 'doorsOpen' && a.state === 'stopped' && a.train.doorsOpen) return true; window.__app.advance(1); } return false; }, [what, key]);
+      console.log(`  advanceUntil ${step.advanceUntil}: ${ok}`); if (!ok) failed = true;
+    }
+    if (step.walk) { await page.keyboard.down('KeyW'); await page.evaluate(s => window.__app.advance(s), step.walk); await page.keyboard.up('KeyW'); await page.evaluate(() => window.__app.advance(0.2)); }
+    if (step.advance) await page.evaluate(s => window.__app.advance(s), step.advance);
+    await page.waitForTimeout(300);
     const file = path.join(outdir, `${String(ROUTE.indexOf(step) + 1).padStart(2, '0')}-${step.name}.png`); await page.screenshot({ path: file });
     const pos = await page.evaluate(() => { const p = window.__app.player; return { x: +p.pos.x.toFixed(2), y: +p.pos.y.toFixed(2), z: +p.pos.z.toFixed(2), zone: p.zone && p.zone.id, grounded: p.grounded, train: !!p.train }; });
     console.log(`${step.name.padEnd(22)} pos=${JSON.stringify(pos)}`);
     if (step.expectZone && pos.zone !== step.expectZone) { console.log(`  !! expected zone ${step.expectZone}`); failed = true; }
     if (step.expectY != null && Math.abs(pos.y - step.expectY) > 0.6) { console.log(`  !! expected y≈${step.expectY}`); failed = true; }
+    if (step.expectTrain != null && pos.train !== step.expectTrain) { console.log(`  !! expected train=${step.expectTrain}`); failed = true; }
+    if (step.expectGrounded && !pos.grounded) { console.log('  !! expected grounded'); failed = true; }
   }
   const stats = await page.evaluate(() => window.__app.stats()); console.log('stats', JSON.stringify(stats));
   const errors = await page.evaluate(() => window.__app.errors);
