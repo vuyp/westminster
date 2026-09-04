@@ -12,8 +12,16 @@ colours, announcement wording). Read this file for how the code fits together.
 ## Conventions
 
 * Units are **metres**, Y is up. `+X = east`, `+Z = south`, so north is `-Z`.
-* World origin `(0,0,0)` = pavement in front of the Bridge Street entrance to the
-  station (beneath the south-east corner of Portcullis House). Street level is `y = 0`.
+* World origin `(0,0,0)` = the main Bridge Street entrance (Exit 4) in the Portcullis
+  House arcade. Street level is `y = 0`. Big Ben is to the south-east (x 22, z 40).
+* Station topology (from the dossier): the Jubilee **box** is 80 × 26 m, long axis
+  east–west, under the south strip of Portcullis House (`layout.JUBILEE.box`); the two
+  Jubilee platform tunnels are **stacked** under Bridge Street just south of the box
+  (Platform 3 eastbound above Platform 4 westbound, platforms on the north/box side);
+  the District & Circle platforms cross the site diagonally at `-8.5 m` (Platform 1
+  westbound on the south-east side, Platform 2 eastbound) — use `layout.dcToWorld(s, t)`
+  / `layout.worldToDc(x, z)` and `layout.DC_YAW` to build in their local frame
+  (`s` along the line towards the north-east, `t` across towards the south-east).
 * All level heights, key positions, track curves and dimensions live in
   **`src/core/layout.js`**. Never hard-code a level height or a platform position
   in a world module — import it from `layout` so that the whole station stays
@@ -136,8 +144,10 @@ train.exteriorBoxes()  // [Box3 in WORLD space] — car bodies (minus open doorw
 The train service attaches the player (`ctx.player.attachTrain(train)`) when they walk through an open doorway into the saloon,
 and the player detaches themself when `resolveInterior` reports `exited`.
 
-The service calls `train.setDoors(true, { side })` where `side` is the platform side relative to travel:
-Jubilee upper (northbound in world terms) → 'right'; Jubilee lower → 'left'; District eastbound → 'left'; District westbound → 'left'.
+The service calls `train.setDoors(true, { side })` where `side` is the platform side relative to travel
+(computed from the track frame and the platform position): Jubilee Platform 3 eastbound (travelling +x, platform to
+the north) → 'left'; Jubilee Platform 4 westbound → 'right'; District Platform 2 eastbound → 'left'; District
+Platform 1 westbound → 'left'.
 
 ### Train service — `src/systems/trainService.js`
 ```js

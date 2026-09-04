@@ -4,7 +4,7 @@
 // footsteps, head-bob, zone detection and E-to-interact.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
-import { ZONES, SPAWN } from '../core/layout.js';
+import { ZONES, SPAWN, worldToDc } from '../core/layout.js';
 
 const EYE = 1.68, RADIUS = 0.33, HEIGHT = 1.78, WALK = 2.1, RUN = 4.2, STEP_UP = 0.42, GRAVITY = 18;
 
@@ -168,7 +168,12 @@ export class Player {
     if (this.train) z = ZONES[0];
     else {
       const p = this.pos; const py = p.y + 1.0;
-      for (const zone of ZONES) { if (zone.id === 'train') continue; if (!zone.box) { z = zone; break; } const b = zone.box; if (p.x >= b.xMin && p.x <= b.xMax && p.z >= b.zMin && p.z <= b.zMax && py >= b.yMin && py <= b.yMax) { z = zone; break; } }
+      for (const zone of ZONES) {
+        if (zone.id === 'train') continue;
+        if (zone.rect) { const r = zone.rect; if (py < r.yMin || py > r.yMax) continue; const l = worldToDc(p.x, p.z); if (l.s >= r.sMin && l.s <= r.sMax && l.t >= r.tMin && l.t <= r.tMax) { z = zone; break; } continue; }
+        if (!zone.box) { z = zone; break; }
+        const b = zone.box; if (p.x >= b.xMin && p.x <= b.xMax && p.z >= b.zMin && p.z <= b.zMax && py >= b.yMin && py <= b.yMax) { z = zone; break; }
+      }
     }
     if (z !== this.zone) { this.zone = z; if (this.audio) this.audio.setZone(z.reverb); if (this.hud) this.hud.location(z.name); }
   }

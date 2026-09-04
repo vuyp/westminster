@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { Track } from '../core/track.js';
-import { TRACKS, JUBILEE, DISTRICT } from '../core/layout.js';
+import { TRACKS, JUBILEE, DISTRICT, dcToWorld } from '../core/layout.js';
 import { STOCK_1996, STOCK_S7, trainLength, doorPositions } from '../entities/trainSpec.js';
 
 const APPROACH_DIST = 420;   // metres before the stop where a train appears (in the tunnel, out of sight)
@@ -40,7 +40,9 @@ class TrainService {
       const line = { key, def, track, svc, platform: def.platform, nextAt: svc.first, active: null, queue: [], pedsKey: key === 'jubileeUpper' ? 'peds:upper' : key === 'jubileeLower' ? 'peds:lower' : null };
       // side of the platform relative to travel direction
       const f = track.frameAt(track.stopS); const left = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), f.tangent);
-      const pc = def.platformCentre; const platZ = key.startsWith('jubilee') ? pc[2] : pc[2]; const platCentre = key.startsWith('jubilee') ? new THREE.Vector3((JUBILEE.platformXMin + JUBILEE.platformXMax) / 2, pc[1], pc[2]) : new THREE.Vector3(pc[0], pc[1], (DISTRICT.platforms[def.platform].zMin + DISTRICT.platforms[def.platform].zMax) / 2);
+      const pc = def.platformCentre; let platCentre;
+      if (key.startsWith('jubilee')) platCentre = new THREE.Vector3(pc[0], pc[1], (JUBILEE.platformZMin + JUBILEE.pedZ) / 2);
+      else { const pl = DISTRICT.platforms[def.platform]; const w = dcToWorld(0, (pl.tMin + pl.tMax) / 2); platCentre = new THREE.Vector3(w.x, pc[1], w.z); }
       line.doorSide = platCentre.clone().sub(f.position).dot(left) > 0 ? 'left' : 'right';
       // pre-plan the next few departures for the indicators
       for (let i = 0; i < 4; i++) line.queue.push({ at: svc.first + i * svc.headway + (i ? this._jitter(20) : 0), destination: this._pick(svc.destinations) });
