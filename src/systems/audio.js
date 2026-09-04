@@ -31,6 +31,8 @@ export class AudioEngine {
     this.muted = false;
     this._registerBuiltinSynths();
     this._captionOnly = typeof speechSynthesis === 'undefined';
+    // Chrome loads voices asynchronously; warm them up so the first announcement gets a British voice.
+    if (!this._captionOnly) { try { speechSynthesis.getVoices(); speechSynthesis.addEventListener('voiceschanged', () => speechSynthesis.getVoices()); } catch (e) { /* ignore */ } }
   }
 
   /** Must be called from a user gesture. Safe to call repeatedly. */

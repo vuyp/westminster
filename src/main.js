@@ -12,6 +12,7 @@ import * as layout from './core/layout.js';
 import { AudioEngine } from './systems/audio.js';
 import { Player } from './systems/player.js';
 import { HUD } from './ui/hud.js';
+import { stationMapHTML } from './ui/stationMap.js';
 
 const WORLD_MODULES = [
   ['street', './world/street.js'],
@@ -40,7 +41,7 @@ window.addEventListener('unhandledrejection', e => app.errors.push('unhandledrej
 async function boot() {
   const canvas = document.getElementById('view');
   const engine = createEngine({ canvas, quality });
-  const hud = new HUD();
+  const hud = new HUD(); hud.setMapHTML(stationMapHTML());
   const audio = new AudioEngine({ hud });
   const collision = new Collision();
   const ctx = createContext({ scene: engine.scene, collision, audio, hud, quality });
