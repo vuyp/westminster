@@ -1,0 +1,12 @@
+import * as THREE from 'three';
+import { createEscalator } from '../entities/escalator.js';
+import { ESCALATORS } from '../core/layout.js';
+export function build(ctx) {
+  const { M, scene, collision, floorPlane } = ctx;
+  const e = ESCALATORS[0];
+  const esc = createEscalator(ctx, { top: e.top, bottom: e.bottom, dir: e.dir, lanes: e.lanes, name: 'esc-A' });
+  scene.add(floorPlane(30, 12, M.granite(), { x: e.top.x, y: e.top.y, z: e.top.z - 6 }));
+  scene.add(floorPlane(30, 12, M.granite(), { x: e.bottom.x, y: e.bottom.y, z: e.bottom.z + 6 }));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(-10, 20, -70); scene.add(sun); scene.add(new THREE.HemisphereLight(0xdde6ff, 0x333333, 1.2));
+  return { esc };
+}
