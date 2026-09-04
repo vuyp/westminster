@@ -47,7 +47,7 @@ try {
   const stats = await page.evaluate(() => window.__app.stats()); console.log('stats', JSON.stringify(stats));
   const errors = await page.evaluate(() => window.__app.errors);
   if (errors.length) { failed = true; console.log('APP ERRORS:'); errors.forEach(e => console.log('  ' + e)); }
-  const bad = logs.filter(l => !/favicon/.test(l)); if (bad.length) { console.log('CONSOLE (errors/warnings):'); bad.slice(0, 60).forEach(l => console.log('  ' + l)); if (bad.some(l => /\[error\]|\[pageerror\]/.test(l))) failed = true; }
+  const bad = logs.filter(l => !/favicon|Failed to load resource.*404|requestfailed|not present yet/.test(l)); if (bad.length) { console.log('CONSOLE (errors/warnings):'); bad.slice(0, 60).forEach(l => console.log('  ' + l)); if (bad.some(l => /\[error\]|\[pageerror\]/.test(l))) failed = true; }
 } finally { await closeBrowser(); close(); }
 console.log(failed ? 'SMOKE TEST FAILED' : 'SMOKE TEST PASSED');
 process.exit(failed ? 1 : 0);

@@ -266,35 +266,39 @@ export function makePlaceholderTrain(ctx, spec) {
   }
   const floorY = spec.floorHeight; let doorsOpen = false, doorT = 0, target = 0;
   const train = {
-    group: g, stock: spec === STOCK_1996 ? '1996' : 'S7', floorY, doorsOpen, sway: 0, spec,
+    group: g, stock: spec === STOCK_1996 ? '1996' : 'S7', floorY, doorsOpen, openSide: 'left', sway: 0, spec,
     interiorContains(p) { return Math.abs(p.x) < spec.width / 2 - 0.15 && Math.abs(p.z) < L / 2 && p.y > floorY - 0.5 && p.y < floorY + 2.2; },
     resolveInterior(p, r) {
       const half = spec.width / 2 - 0.12; let exited = false;
       if (Math.abs(p.x) > half - r) {
         // in a doorway and doors open? then allow exit
-        const nearDoor = doorLeaves.some(d => d.side === (p.x < 0 ? 'left' : 'right') && Math.abs(p.z - (cars.find(c => Math.abs(p.z - c.zc) < c.len / 2)?.zc ?? 1e9) - d.base) < d.width / 2 + 0.2);
-        if (train.doorsOpen && nearDoor) { if (Math.abs(p.x) > half + 0.6) exited = true; }
+        const sideHere = p.x < 0 ? 'left' : 'right';
+        const nearDoor = doorLeaves.some(d => d.side === sideHere && Math.abs(p.z - (cars.find(c => Math.abs(p.z - c.zc) < c.len / 2)?.zc ?? 1e9) - d.base) < d.width / 2 + 0.2);
+        if (train.doorsOpen && train.openSide === sideHere && nearDoor) { if (Math.abs(p.x) > half + 0.6) exited = true; }
         else p.x = Math.sign(p.x) * (half - r);
       }
       if (Math.abs(p.z) > L / 2 - 0.6) p.z = Math.sign(p.z) * (L / 2 - 0.6);
       return { exited };
     },
-    setDoors(open) { target = open ? 1 : 0; train.doorsOpen = open; ctx.audio.play('doorMove', { object: g, gain: 0.6, params: { seconds: spec.doorTime, closing: !open }, refDistance: 4, maxDistance: 40 }); },
+    setDoors(open, { side = 'left' } = {}) { target = open ? 1 : 0; train.doorsOpen = open; train.openSide = side; ctx.audio.play('doorMove', { object: g, gain: 0.6, params: { seconds: spec.doorTime, closing: !open }, refDistance: 4, maxDistance: 40 }); },
     setDisplay() {}, setDestination() {}, setSpeed() {},
     exteriorBoxes() {
-      // car bodies as world AABBs; when the doors are open, leave gaps at the doorways so passengers can board
+      // car bodies as world AABBs, split into left/right halves; on the OPEN side leave gaps at the doorways so passengers can board
       const out = []; g.updateMatrixWorld(true);
       for (let i = 0; i < cars.length; i++) {
         const c = cars[i]; const dws = (spec.doorwaysDM && (i === 0 || i === spec.cars - 1)) ? spec.doorwaysDM : spec.doorways;
-        const segs = [];
-        if (!train.doorsOpen) segs.push([-c.len / 2, c.len / 2]);
-        else { let z0 = -c.len / 2; const gaps = dws.map(d => [-d.offset - d.width / 2 - 0.1, -d.offset + d.width / 2 + 0.1]).sort((a, b) => a[0] - b[0]); for (const [ga, gb] of gaps) { if (ga > z0) segs.push([z0, ga]); z0 = Math.max(z0, gb); } if (z0 < c.len / 2) segs.push([z0, c.len / 2]); }
-        for (const [za, zb] of segs) { const b = new THREE.Box3(new THREE.Vector3(-spec.width / 2, 0, za + c.zc), new THREE.Vector3(spec.width / 2, spec.height, zb + c.zc)); b.applyMatrix4(g.matrixWorld); out.push(b); }
+        for (const side of ['left', 'right']) {
+          const segs = [];
+          if (!train.doorsOpen || train.openSide !== side) segs.push([-c.len / 2, c.len / 2]);
+          else { let z0 = -c.len / 2; const gaps = dws.map(d => [-d.offset - d.width / 2 - 0.1, -d.offset + d.width / 2 + 0.1]).sort((a, b) => a[0] - b[0]); for (const [ga, gb] of gaps) { if (ga > z0) segs.push([z0, ga]); z0 = Math.max(z0, gb); } if (z0 < c.len / 2) segs.push([z0, c.len / 2]); }
+          const x0 = side === 'left' ? -spec.width / 2 : 0, x1 = side === 'left' ? 0 : spec.width / 2;
+          for (const [za, zb] of segs) { const b = new THREE.Box3(new THREE.Vector3(x0, 0, za + c.zc), new THREE.Vector3(x1, spec.height, zb + c.zc)); b.applyMatrix4(g.matrixWorld); out.push(b); }
+        }
       }
       return out;
     },
     placeAlong(track, s) { const f = track.frameAt(s); g.position.copy(f.position); g.quaternion.copy(f.quaternion); g.updateMatrixWorld(true); },
-    update(dt) { doorT += (target - doorT) * Math.min(1, dt * (2 / spec.doorTime) * 2); for (const d of doorLeaves) d.mesh.visible = doorT < 0.85; },
+    update(dt) { doorT += (target - doorT) * Math.min(1, dt * (2 / spec.doorTime) * 2); for (const d of doorLeaves) d.mesh.visible = !(train.doorsOpen && train.openSide === d.side && doorT > 0.85); },
     dispose() {},
   };
   return train;
