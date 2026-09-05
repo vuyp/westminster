@@ -164,8 +164,8 @@ const atlasCache = new Map();
 const FONT = T.SIGN_FONT;
 
 /**
- * One 1024² transparent canvas with every sticker/decal a train carries. Returns { texture, rect(name) → {u0,v0,u1,v1, aspect} }.
- * Cells are 256 px; some entries span two cells.
+ * One 1024² transparent canvas with every sticker/decal a train carries (sizes from dossier §8). Returns
+ * { texture, rect(name) → {u0,v0,u1,v1, aspect} }. Cells are 256 px; some entries span two cells.
  */
 export function decalAtlas(spec, { unitNumber = spec.unitNumbers[0], lineName = spec.line === 'jubilee' ? 'Jubilee line' : 'District line', lineColor = spec.line === 'jubilee' ? '#a0a5a9' : '#00782a' } = {}) {
   const key = spec.code + ':' + unitNumber + ':' + lineName;
@@ -179,39 +179,45 @@ export function decalAtlas(spec, { unitNumber = spec.unitNumbers[0], lineName = 
     ctx.fillText(str, x, y);
   };
   const rrect = (x, y, w, h, r, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); };
+  const hazard = (x, y, w, h, vertical) => { // yellow/black 'shark teeth' hazard strip
+    ctx.fillStyle = '#ffcd00'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#111';
+    if (vertical) for (let yy = y; yy < y + h; yy += 28) { ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + w, yy + 14); ctx.lineTo(x, yy + 28); ctx.closePath(); ctx.fill(); }
+    else for (let xx = x; xx < x + w; xx += 28) { ctx.beginPath(); ctx.moveTo(xx, y); ctx.lineTo(xx + 14, y + h); ctx.lineTo(xx + 28, y); ctx.closePath(); ctx.fill(); }
+  };
+  const is96 = spec.code === '1996';
 
-  // roundel (transparent background)
+  // row 0: roundel (440 mm), line name label, car number (blue 80 mm caps on the bodyside), car number in white (cab front)
   { const r = cell('roundel', 0, 0); T.drawRoundel(ctx, r.x + C / 2, r.y + C / 2, C * 0.46, { text: 'UNDERGROUND' }); }
-  // line name label with the line-colour bar (exterior, beside the roundel)
   { const r = cell('lineName', 1, 0, 2, 1); ctx.fillStyle = lineColor; ctx.fillRect(r.x + 16, r.y + 150, r.w - 32, 22); text(lineName, r.x + r.w / 2, r.y + 92, 84, { color: '#1c1c1c', maxW: r.w - 40 }); }
-  // unit number (exterior, under the cab window and on the car ends)
-  { const r = cell('unitNo', 3, 0); text(unitNumber, r.x + C / 2, r.y + C / 2, 92, { color: '#1c1c1c', weight: '600' }); }
-  // Priority seat sticker (blue, white text + figures)
-  { const r = cell('priority', 0, 1); rrect(r.x + 8, r.y + 8, C - 16, C - 16, 14, '#113b92'); text('Priority', r.x + C / 2, r.y + 52, 42, { color: '#fff' }); text('seat', r.x + C / 2, r.y + 94, 42, { color: '#fff' });
-    text('Please offer this seat to', r.x + C / 2, r.y + 150, 19, { color: '#fff', weight: 'normal' }); text('someone who needs it more', r.x + C / 2, r.y + 172, 19, { color: '#fff', weight: 'normal' });
-    ctx.fillStyle = '#fff'; [[64, 'stick'], [108, 'cane'], [152, 'preg'], [196, 'child']].forEach(([px]) => { ctx.beginPath(); ctx.arc(r.x + px, r.y + 204, 7, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(r.x + px - 4, r.y + 212, 8, 24); }); }
-  // door sticker: "Please stand clear of the doors" — white, black text, red header (interior of every doorway)
-  { const r = cell('standClear', 1, 1, 2, 1); rrect(r.x + 8, r.y + 24, r.w - 16, r.h - 48, 10, '#f4f4f4'); ctx.fillStyle = '#dc241f'; ctx.fillRect(r.x + 8, r.y + 24, r.w - 16, 44);
-    text('Obstructing the doors', r.x + r.w / 2, r.y + 46, 28, { color: '#fff' }); text('can be dangerous', r.x + r.w / 2, r.y + 100, 40, { color: '#111' }); text('Please stand clear of the doors', r.x + r.w / 2, r.y + 150, 34, { color: '#111', maxW: r.w - 40 }); text('Doors close automatically', r.x + r.w / 2, r.y + 200, 24, { color: '#444', weight: 'normal' }); }
-  // Emergency alarm (red)
-  { const r = cell('alarm', 3, 1); rrect(r.x + 8, r.y + 8, C - 16, C - 16, 10, '#c8102e'); text('EMERGENCY', r.x + C / 2, r.y + 50, 34, { color: '#fff' }); text('ALARM', r.x + C / 2, r.y + 90, 34, { color: '#fff' });
-    ctx.fillStyle = '#ffd300'; ctx.fillRect(r.x + 100, r.y + 120, 56, 90); ctx.fillStyle = '#111'; ctx.fillRect(r.x + 116, r.y + 128, 24, 40); text('Pull handle down', r.x + C / 2, r.y + 228, 18, { color: '#fff', weight: 'normal' }); }
-  // cab door: DO NOT OBSTRUCT
+  { const r = cell('unitNo', 3, 0); text(unitNumber, r.x + C / 2, r.y + C / 2, 92, { color: '#0019a8', weight: '600' }); }
+  // row 1: priority seat (100 × 140), door notice above the door windows (500 × 50, blue/yellow), emergency alarm / door release
+  { const r = cell('priority', 0, 1); rrect(r.x + 40, r.y + 8, C - 80, C - 16, 10, '#005eb8'); text('Priority', r.x + C / 2, r.y + 56, 34, { color: '#fff' }); text('seat', r.x + C / 2, r.y + 92, 34, { color: '#fff' });
+    text('Please offer this', r.x + C / 2, r.y + 138, 15, { color: '#fff', weight: 'normal' }); text('seat to someone', r.x + C / 2, r.y + 156, 15, { color: '#fff', weight: 'normal' }); text('who needs it more', r.x + C / 2, r.y + 174, 15, { color: '#fff', weight: 'normal' });
+    ctx.fillStyle = '#fff'; [88, 116, 144, 172].forEach(px => { ctx.beginPath(); ctx.arc(r.x + px, r.y + 204, 6, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(r.x + px - 3.5, r.y + 211, 7, 22); }); }
+  { const r = cell('standClear', 1, 1, 2, 1); ctx.fillStyle = '#0019a8'; ctx.fillRect(r.x, r.y + 100, r.w, 52); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y + 152, r.w, 4);
+    text('Obstructing the doors can be dangerous', r.x + r.w / 2, r.y + 120, 24, { color: '#fff', maxW: r.w - 16 }); text('and causes delays   ·   Penalty fare £50', r.x + r.w / 2, r.y + 141, 15, { color: '#ffcd00', weight: 'normal', maxW: r.w - 16 }); }
+  { const r = cell('alarm', 3, 1); if (is96) { rrect(r.x + 8, r.y + 8, C - 16, C - 16, 10, '#c8102e'); text('EMERGENCY', r.x + C / 2, r.y + 50, 34, { color: '#fff' }); text('ALARM', r.x + C / 2, r.y + 90, 34, { color: '#fff' });
+      ctx.fillStyle = '#ffd300'; ctx.fillRect(r.x + 100, r.y + 120, 56, 90); ctx.fillStyle = '#111'; ctx.fillRect(r.x + 116, r.y + 128, 24, 40); text('Pull handle down', r.x + C / 2, r.y + 228, 18, { color: '#fff', weight: 'normal' }); }
+    else { rrect(r.x + 8, r.y + 8, C - 16, C / 2 - 8, 8, '#c8102e'); rrect(r.x + 8, r.y + C / 2, C - 16, C / 2 - 8, 8, '#007a33'); text('Emergency', r.x + C / 2, r.y + 46, 30, { color: '#fff' }); text('door release', r.x + C / 2, r.y + 84, 30, { color: '#fff' }); text('Lift flap · pull handle', r.x + C / 2, r.y + 160, 20, { color: '#fff', weight: 'normal' }); text('Wait for the train to stop', r.x + C / 2, r.y + 200, 18, { color: '#fff', weight: 'normal' }); } }
+  // row 2: cab door, wheelchair, no smoking, CCTV
   { const r = cell('doNotObstruct', 0, 2); rrect(r.x + 8, r.y + 40, C - 16, C - 80, 8, '#f4f4f4'); text('DRIVER', r.x + C / 2, r.y + 84, 30, { color: '#111' }); text('DO NOT', r.x + C / 2, r.y + 124, 34, { color: '#c8102e' }); text('OBSTRUCT', r.x + C / 2, r.y + 164, 34, { color: '#c8102e' }); }
-  // wheelchair space (blue square, white pictogram)
-  { const r = cell('wheelchair', 1, 2); rrect(r.x + 8, r.y + 8, C - 16, C - 16, 14, '#113b92'); ctx.strokeStyle = '#fff'; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(r.x + 128, r.y + 150, 44, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r.x + 118, r.y + 62, 16, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(r.x + 108, r.y + 78, 18, 60); ctx.fillRect(r.x + 108, r.y + 122, 60, 14); ctx.fillRect(r.x + 158, r.y + 122, 14, 44); text('Wheelchair space', r.x + C / 2, r.y + 228, 20, { color: '#fff', weight: 'normal' }); }
-  // No smoking
+  { const r = cell('wheelchair', 1, 2); rrect(r.x + 18, r.y + 8, C - 36, C - 16, 14, '#005eb8'); ctx.strokeStyle = '#fff'; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(r.x + 128, r.y + 150, 44, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r.x + 118, r.y + 62, 16, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(r.x + 108, r.y + 78, 18, 60); ctx.fillRect(r.x + 108, r.y + 122, 60, 14); ctx.fillRect(r.x + 158, r.y + 122, 14, 44); text('Priority area', r.x + C / 2, r.y + 228, 20, { color: '#fff', weight: 'normal' }); }
   { const r = cell('noSmoking', 2, 2); rrect(r.x + 8, r.y + 8, C - 16, C - 16, 14, '#f4f4f4'); ctx.strokeStyle = '#dc241f'; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(r.x + 128, r.y + 110, 66, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#333'; ctx.fillRect(r.x + 82, r.y + 104, 92, 14); ctx.strokeStyle = '#dc241f'; ctx.beginPath(); ctx.moveTo(r.x + 80, r.y + 62); ctx.lineTo(r.x + 176, r.y + 158); ctx.stroke(); text('No smoking', r.x + C / 2, r.y + 212, 26, { color: '#111' }); }
-  // CCTV
   { const r = cell('cctv', 3, 2); rrect(r.x + 8, r.y + 60, C - 16, C - 120, 8, '#ffd300'); text('CCTV', r.x + C / 2, r.y + 108, 44, { color: '#111' }); text('in operation on this train', r.x + C / 2, r.y + 156, 20, { color: '#111', weight: 'normal' }); }
-  // MIND THE GAP (door threshold)
+  // row 3: floor threshold, car number plate (interior), cab-end door label, leaf labels
   { const r = cell('mindGap', 0, 3, 2, 1); ctx.fillStyle = '#ffd300'; ctx.fillRect(r.x, r.y + 96, r.w, 64); text('MIND THE GAP', r.x + r.w / 2, r.y + 128, 46, { color: '#111' }); }
-  // class label / small unit code (interior end)
-  { const r = cell('carNo', 2, 3); text(unitNumber, r.x + C / 2, r.y + 100, 60, { color: '#222' }); text(spec.code === 'S7' ? 'S7 Stock' : '1996 Tube Stock', r.x + C / 2, r.y + 160, 24, { color: '#444', weight: 'normal' }); }
-  // door open/close indicator lamp label + "Push" for end door
-  { const r = cell('endDoor', 3, 3); rrect(r.x + 8, r.y + 60, C - 16, C - 120, 8, '#f4f4f4'); text('Emergency use only', r.x + C / 2, r.y + 100, 22, { color: '#c8102e' }); text('Do not lean on the door', r.x + C / 2, r.y + 140, 20, { color: '#111', weight: 'normal' }); }
+  { const r = cell('carNo', 2, 3); text(unitNumber, r.x + C / 2, r.y + 100, 60, { color: '#0019a8' }); text(is96 ? '1996 Tube Stock' : 'S7 Stock', r.x + C / 2, r.y + 160, 24, { color: '#444', weight: 'normal' }); }
+  { const r = cell('endDoor', 3, 3); if (is96) { rrect(r.x + 8, r.y + 60, C - 16, C - 120, 8, '#c8102e'); text('This door', r.x + C / 2, r.y + 100, 28, { color: '#fff' }); text('is alarmed', r.x + C / 2, r.y + 136, 28, { color: '#fff' }); }
+    else { rrect(r.x + 8, r.y + 60, C - 16, C - 120, 8, '#f4f4f4'); text('Please keep', r.x + C / 2, r.y + 100, 24, { color: '#111' }); text('the gangway clear', r.x + C / 2, r.y + 136, 24, { color: '#111' }); } }
+  // door-leaf labels in the free corner of the last cell: 'Caution – Sliding doors' 130 × 52 (yellow/black), leading-edge hazard strip (vertical), interior 'Items trapped in the doors cause delays' yellow strip (vertical), white cab-front number
+  const sub = (name, x, y, w, h) => { rects[name] = { u0: x / S + 0.002, u1: (x + w) / S - 0.002, v0: 1 - (y + h) / S + 0.002, v1: 1 - y / S - 0.002, aspect: w / h }; return { x, y, w, h }; };
+  { const r = sub('slidingDoors', 780, 776, 236, 96); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, 26, r.h); text('CAUTION', r.x + 30 + (r.w - 30) / 2, r.y + 30, 26, { color: '#111' }); text('Sliding doors', r.x + 30 + (r.w - 30) / 2, r.y + 66, 24, { color: '#111', weight: 'normal' }); }
+  { const r = sub('hazard', 780, 880, 60, 136); hazard(r.x, r.y, r.w, r.h, true); }
+  { const r = sub('itemsTrapped', 850, 880, 60, 136); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.save(); ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.rotate(-Math.PI / 2); text(is96 ? 'Items trapped in the doors cause delays' : 'Mind the gap · items trapped in doors', 0, 0, 13, { color: '#111', maxW: r.h - 8 }); ctx.restore(); }
+  { const r = sub('unitNoWhite', 920, 880, 96, 60); text(unitNumber, r.x + r.w / 2, r.y + r.h / 2, 30, { color: '#fff', weight: '600' }); }
+  { const r = sub('deicing', 920, 950, 60, 60); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r.x + 30, r.y + 30, 26, 0, Math.PI * 2); ctx.fill(); }
 
   const texture = T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping }); texture.anisotropy = 8;
   const out = { texture, rect: n => rects[n], rects };
@@ -232,20 +238,28 @@ export function trainMaterials(spec) {
   const key = spec.code;
   if (matCache.has(key)) return matCache.get(key);
   const L = spec.livery; const is96 = spec.code === '1996';
-  const floorTex = T.granite({ base: 0x3d3f43, light: 0x6d6f73, dark: 0x1e1f21, joints: false, seed: 23 });
+  const floorTex = T.granite({ base: L.floor, light: L.floorGroove, dark: is96 ? 0x1e1f21 : 0x3a3d40, joints: false, seed: is96 ? 23 : 29 });
   const mats = {
-    body: is96 ? M.aluminium() : M.paint(L.body, { roughness: 0.42, metalness: 0.25 }),
-    blue: M.paint(L.skirt, { roughness: 0.5, metalness: 0.2 }),
+    body: M.paint(L.body, { roughness: 0.42, metalness: is96 ? 0.8 : 0.55 }),
+    lowerBody: M.paint(L.lowerBody, { roughness: 0.5, metalness: is96 ? 0.75 : 0.55 }),
+    blue: M.paint(0x0019a8, { roughness: 0.5, metalness: 0.2 }),
     red: M.paint(L.doors, { roughness: 0.4, metalness: 0.2 }),
+    cabFace: M.paint(L.cabFace, { roughness: 0.45, metalness: 0.2 }),
+    valance: M.paint(L.valance, { roughness: 0.6, metalness: 0.3 }),
+    cabDoor: M.paint(L.cabDoors, { roughness: 0.45, metalness: is96 ? 0.2 : 0.55 }),
     roof: M.paint(L.roof, { roughness: 0.7, metalness: 0.35 }),
+    windowFrame: M.paint(L.windowFrame, { roughness: 0.55, metalness: 0.3 }),
     glass: M.glass({ tint: L.windowTint, opacity: 0.62, roughness: 0.06 }),
     clearGlass: M.glass({ color: 0xe4edf2, opacity: 0.22, roughness: 0.04 }),
     rubber: M.rubber(0x141414),
-    bellows: new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
+    bellows: new THREE.MeshStandardMaterial({ color: is96 ? 0x1b1b1b : 0x4a4c4f, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
     dark: M.paint(0x35373b, { roughness: 0.8, metalness: 0.4 }),
     steel: M.stainless(),
-    yellow: M.paint(0xf2c200, { roughness: 0.45, metalness: 0.1 }),
-    lining: lit(0xe9e8e3, 0.30),
+    yellow: M.paint(0xffcd00, { roughness: 0.45, metalness: 0.1 }),
+    pole: L.poleMetal ? M.paint(L.pole, { roughness: 0.35, metalness: 0.85 }) : M.paint(L.pole, { roughness: 0.4, metalness: 0.15 }),
+    armrest: M.paint(L.armrest, { roughness: 0.5, metalness: 0.2 }),
+    strap: M.paint(L.strap, { roughness: 0.85, metalness: 0 }),
+    lining: lit(L.lining, 0.30),
     liningGrey: lit(0xb9bcc0, 0.20, { roughness: 0.6, metalness: 0.2 }),
     liningDark: lit(0x474a50, 0.12, { roughness: 0.7, metalness: 0.2 }),
     floor: litMap(floorTex.map, floorTex.metres, 0.24, { roughness: 0.55 }),
@@ -253,11 +267,12 @@ export function trainMaterials(spec) {
     lamp: M.luminaire(0xfff3e0, 1.7),
     lampHousing: M.paint(0xf4f4f0, { roughness: 0.5, metalness: 0.1 }),
     perforated: (() => { const p = T.perforated({ color: 0xe2e3e5 }); return litMap(p.map, p.metres, 0.15, { roughness: 0.5, metalness: 0.3 }); })(),
-    headOn: M.luminaire(0xffffff, 3.2), headOff: M.paint(0xcfd5da, { roughness: 0.25, metalness: 0.6 }),
+    headOn: M.luminaire(is96 ? 0xfff1d6 : 0xffffff, 3.2), headOff: M.paint(0xcfd5da, { roughness: 0.25, metalness: 0.6 }),
     tailOn: M.luminaire(0xff2a1a, 2.6), tailOff: M.paint(0x6e1410, { roughness: 0.3, metalness: 0.4 }),
     cabDark: M.paint(0x25272b, { roughness: 0.85, metalness: 0.2 }),
-    wheel: M.paint(0x4c4e52, { roughness: 0.45, metalness: 0.75 }),
+    wheel: M.paint(0x6a6d72, { roughness: 0.45, metalness: 0.7 }),
     indicator: M.luminaire(0xff8a1a, 0.9),
+    ledHousing: M.paint(0x1e1f22, { roughness: 0.6, metalness: 0.3 }),
   };
   matCache.set(key, mats); return mats;
 }
@@ -288,23 +303,21 @@ export function wheelGeometry(diameter) {
 /**
  * A door leaf for the +x bodyside, centred on z = 0, hanging on the car profile with the outer face 50 mm behind the skin
  * (the leaf slides in the pocket between the outer skin and the interior lining). `lead` = +1 → leading edge at +z.
- * Geometry groups (in order): red panel, glass, rubber gasket/seal, yellow stripe + grab handle.
+ * Geometry groups (in order): red panel, glass, rubber gasket/seal, yellow (leading-edge hazard strip backing),
+ * pole-coloured interior grab handle, decals (labels from the atlas).
  */
-export function leafGeometry(spec, width, lead) {
-  const key = `leaf:${spec.code}:${width}:${lead}`; if (geoCache.has(key)) return geoCache.get(key);
+export function leafGeometry(spec, width, lead, atlas) {
+  const key = `leaf:${spec.code}:${width}:${lead}:${atlas ? atlas.texture.uuid : ''}`; if (geoCache.has(key)) return geoCache.get(key);
   const P = spec.profile; const sill = spec.doorSill + 0.015, top = spec.doorSill + spec.doorHeight - 0.02; const [wb, wt] = spec.doorWindow;
-  const w = width, hw = w / 2, e = 0.09; const out = 0.05, inn = 0.10;
-  const red = [], glass = [], rubber = [], yellow = [];
-  // outer face (4 pieces around the window) + inner face (flipped)
+  const w = width, hw = w / 2, e = 0.09; const out = 0.05, inn = 0.10; const is96 = spec.code === '1996';
+  const red = [], glass = [], rubber = [], yellow = [], pole = [], decal = [];
   for (const [ins, flip] of [[out, false], [inn, true]]) {
     red.push(profileStrip(P, sill, wb, -hw, hw, { inset: ins, flip }));
     red.push(profileStrip(P, wt, top, -hw, hw, { inset: ins, flip }));
     red.push(profileStrip(P, wb, wt, -hw, -hw + e, { inset: ins, flip }));
     red.push(profileStrip(P, wb, wt, hw - e, hw, { inset: ins, flip }));
   }
-  // edge closures
   red.push(profileRibbon(P, sill, top, -hw, out, inn, { dir: -1 })); red.push(profileRibbon(P, sill, top, hw, out, inn, { dir: 1 }));
-  // window: glass in the middle of the leaf thickness, gasket frame around it on the outer face
   glass.push(profileStrip(P, wb, wt, -hw + e, hw - e, { inset: 0.075 }));
   glass.push(profileStrip(P, wb, wt, -hw + e, hw - e, { inset: 0.076, flip: true }));
   const gk = 0.028;
@@ -312,14 +325,26 @@ export function leafGeometry(spec, width, lead) {
   rubber.push(profileStrip(P, wt - 0.004, wt + gk, -hw + e - gk, hw - e + gk, { inset: out - 0.004 }));
   rubber.push(profileStrip(P, wb, wt, -hw + e - gk, -hw + e + 0.004, { inset: out - 0.004 }));
   rubber.push(profileStrip(P, wb, wt, hw - e - 0.004, hw - e + gk, { inset: out - 0.004 }));
-  // leading-edge rubber seal
   rubber.push(profileRibbon(P, sill, top, lead * hw + lead * 0.012, out - 0.01, inn + 0.01, { dir: lead }));
-  // yellow leading-edge stripe (outer face) + interior vertical grab handle near the leading edge
-  yellow.push(profileStrip(P, sill + 0.02, top - 0.02, lead > 0 ? hw - 0.06 : -hw, lead > 0 ? hw : -hw + 0.06, { inset: out - 0.003 }));
-  const hz = lead * (hw - 0.14);
-  yellow.push(profileTube(P, sill + 0.75, sill + 1.55, hz, inn + 0.045, 0.016));
-  for (const y of [sill + 0.78, sill + 1.52]) yellow.push(boxAt(0.045, 0.03, 0.03, xAt(P, y) - inn - 0.022, y, hz));
-  const parts = [red, glass, rubber, yellow].map(list => mergeGeometries(list, false));
+  // leading-edge hazard strip (exterior): 1996 70 × 606 mm at c. 1.0–1.6 m above the floor; S7 80 × 304 mm, top aligned with the window tops
+  const hz0 = is96 ? sill + 0.95 : wt - 0.30, hz1 = is96 ? sill + 1.56 : wt; const hzw = is96 ? 0.07 : 0.08;
+  const edgeZ0 = lead > 0 ? hw - hzw : -hw, edgeZ1 = lead > 0 ? hw : -hw + hzw;
+  yellow.push(profileStrip(P, hz0, hz1, edgeZ0, edgeZ1, { inset: out - 0.004 }));
+  // interior grab handle near the leading edge
+  const hzc = lead * (hw - 0.14);
+  pole.push(profileTube(P, sill + 0.75, sill + 1.55, hzc, inn + 0.045, 0.016));
+  for (const y of [sill + 0.78, sill + 1.52]) pole.push(boxAt(0.045, 0.03, 0.03, xAt(P, y) - inn - 0.022, y, hzc));
+  if (atlas) {
+    const put = (name, y0, y1, z0, z1, inset, flip) => { const g = profileStrip(P, y0, y1, z0, z1, { inset, flip, steps: 2 }); const r = atlas.rect(name); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) { const u = (uv.getX(i) - z0) / (z1 - z0), v = (uv.getY(i) - y0) / (y1 - y0); uv.setXY(i, r.u0 + (r.u1 - r.u0) * (flip ? 1 - u : u), r.v0 + (r.v1 - r.v0) * v); } decal.push(g); };
+    // exterior: hazard chevrons on the strip, 'Caution – Sliding doors' 130 × 52 on the lower panel
+    put('hazard', hz0, hz1, edgeZ0, edgeZ1, out - 0.008, false);
+    put('slidingDoors', sill + 0.62, sill + 0.672, -0.065, 0.065, out - 0.006, false);
+    // interior: 'Items trapped in the doors cause delays' yellow strip on the opening edge (74 × 265 / 80 × 419)
+    const itZ = lead > 0 ? [hw - 0.15, hw - 0.075] : [-hw + 0.075, -hw + 0.15];
+    put('itemsTrapped', sill + 0.95, sill + (is96 ? 1.215 : 1.37), itZ[0], itZ[1], inn + 0.006, true);
+    put('standClear', wt + 0.02, wt + 0.07, -hw + 0.1, hw - 0.1, inn + 0.006, true);
+  }
+  const parts = [red, glass, rubber, yellow, pole, decal].map(list => list.length ? mergeGeometries(list, false) : new THREE.PlaneGeometry(0.001, 0.001));
   const g = mergeGeometries(parts, true); g.computeBoundingSphere();
   geoCache.set(key, g); return g;
 }

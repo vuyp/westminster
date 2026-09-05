@@ -15,13 +15,13 @@
 // standing inside stopped trains, and staff in hi-vis at fixed posts.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
-import { LEVELS, STREET, TICKET_HALL, DISTRICT, JUBILEE } from '../core/layout.js';
+import { LEVELS, TICKET_HALL } from '../core/layout.js';
 import { STOCK_1996, STOCK_S7, doorPositions } from './trainSpec.js';
 import { createNpcPool, randomAppearance } from './npcModel.js';
-import { buildDefaultGraph, attachEscalators, mergeExternal, validateGraph, Agent, pathToWaypoints, BIG_BEN, gateX, GATE_PITCH } from './npcBehaviour.js';
+import { attachEscalators, mergeExternal, validateGraph, Agent, pathToWaypoints } from './npcBehaviour.js';
+import { buildDefaultGraph, buildWaitSpots, onPlatform, staffPosts, murmurSpots, gateCrossing, gateCentre, GATELINE, BIG_BEN } from './npcGraph.js';
 import { mulberry32 } from '../core/textures.js';
 
-const GATE = TICKET_HALL.gateline;
 const CELL = 2.5;
 
 class Population {
@@ -56,20 +56,9 @@ class Population {
   }
 
   _buildWaitSpots() {
-    const { collision } = this.ctx; const rng = this.rng; const spots = {};
+    const { collision } = this.ctx;
     const ok = (x, y, z) => { const f = collision.floorAt(x, z, y + 0.6, { stepUp: 0.7, drop: 1.4 }); return f && Math.abs(f.y - y) < 0.35; };
-    // Jubilee: stand ~1.3 m back from the PEDs, denser near the box (where the escalators arrive)
-    for (const [p, y] of [[4, LEVELS.jubUpper], [3, LEVELS.jubLower]]) {
-      const list = [];
-      for (let z = JUBILEE.zMin + 14; z < JUBILEE.zMax - 8; z += 2.2) { const x = JUBILEE.pedX + 1.15 + rng() * 0.5; const zz = z + (rng() - 0.5) * 1.2; if (!ok(x, y, zz)) continue; const w = (zz > -112 && zz < -50) ? 1 : 0.35; list.push({ x, y, z: zz, w, agent: null, face: new THREE.Vector3(JUBILEE.trackX, y, zz), tunnel: p === 4 ? Math.PI : 0 }); }
-      spots[p] = list;
-    }
-    for (const p of Object.values(DISTRICT.platforms)) {
-      const list = []; const y = LEVELS.dcPlatform; const inward = p.zMin === p.edgeZ ? 1 : -1; const trackZ = DISTRICT.tracks[p.direction].z;
-      for (let x = DISTRICT.xMin + 10; x < DISTRICT.xMax - 8; x += 2.2) { const z = p.edgeZ + inward * (1.4 + rng() * 0.6); const xx = x + (rng() - 0.5) * 1.2; if (!ok(xx, y, z)) continue; const w = (Math.abs(xx + 10) < 22 || Math.abs(xx - 22) < 12) ? 1 : 0.35; list.push({ x: xx, y, z, w, agent: null, face: new THREE.Vector3(xx, y, trackZ), tunnel: p.direction === 'eastbound' ? -Math.PI / 2 : Math.PI / 2 }); }
-      spots[p.number] = list;
-    }
-    this.spots = spots;
+    this.spots = buildWaitSpots(this.rng, ok);
   }
 
   _pickSpot(platform) {
@@ -92,7 +81,7 @@ class Population {
     const from = this._nearestNode(a); if (from < 0 || to < 0) return false;
     const seed = a.costSeed; const costMul = e => (e.kind === 'esc' ? 0.85 + ((seed * 7919 + e.from * 31) % 1) * 0.4 : 1);
     const ids = this.G.path(from, to, costMul); if (!ids) return false;
-    let wps = pathToWaypoints(this.G, ids, { jitter, rng: this.rng });
+    let wps = pathToWaypoints(this.G, ids, { jitter, rng: this.rng, collision: this.ctx.collision });
     wps = this._insertGates(a, wps);
     if (reach != null && wps.length) { const last = wps[wps.length - 1]; last.meta = Object.assign({}, last.meta, { reach }); }
     a.setPath(wps); return wps.length > 0;
@@ -102,15 +91,14 @@ class Population {
     for (let i = 0; i < wps.length; i++) {
       const w = wps[i];
       if (i > 0) {
-        const p = wps[i - 1]; const crosses = (p.z - GATE.z) * (w.z - GATE.z) < 0 && Math.abs(p.y - H) < 1 && Math.abs(w.y - H) < 1;
-        if (crosses) {
-          const t = (GATE.z - p.z) / (w.z - p.z); const xc = p.x + (w.x - p.x) * t;
-          if (xc > GATE.xMin - 1 && xc < GATE.xMax + 1) {
-            let gi = Math.round((xc - GATE.xMin) / GATE_PITCH - 0.5); gi = Math.max(0, Math.min(GATE.gates - 1, gi));
-            if (a.app.suitcase || a.app.child) gi = GATE.wideGateIndex;
-            const gx = gateX(gi); const dir = Math.sign(w.z - p.z);
-            const A = new THREE.Vector3(gx, H, GATE.z - dir * 1.5); A.meta = { pause: 0.55 + this.rng() * 0.4, reach: 0.3, onReach: ag => this._tapGate(gi, ag, A), lookAt: new THREE.Vector3(gx, H, GATE.z + dir * 5) };
-            const B = new THREE.Vector3(gx, H, GATE.z + dir * 1.5); B.meta = { skipWalls: true, reach: 0.35 };
+        const p = wps[i - 1];
+        if (Math.abs(p.y - H) < 1 && Math.abs(w.y - H) < 1) {
+          const c = gateCrossing(p.x, p.z, w.x, w.z);
+          if (c) {
+            let gi = c.gate; if (a.app.suitcase || a.app.child) gi = GATELINE.wide;
+            const g = gateCentre(gi); const n = GATELINE.normal; const dir = c.dir;   // +1 entering the paid side
+            const A = new THREE.Vector3(g.x - n.x * dir * 1.6, H, g.z - n.y * dir * 1.6); A.meta = { pause: 0.55 + this.rng() * 0.4, reach: 0.3, onReach: ag => this._tapGate(gi, ag, A), lookAt: new THREE.Vector3(g.x + n.x * dir * 6, H, g.z + n.y * dir * 6) };
+            const B = new THREE.Vector3(g.x + n.x * dir * 1.6, H, g.z + n.y * dir * 1.6); B.meta = { skipWalls: true, reach: 0.35 };
             w.meta = Object.assign({}, w.meta, { skipWalls: false });
             out.push(A, B);
           }
@@ -135,18 +123,18 @@ class Population {
   // ------------------------------------------------------------------ journeys (plans are arrays of steps)
   /** Street wanderer: pavement end → end, maybe crossing the road, maybe a Big Ben photo. */
   planStreet(a) {
-    const r = this.rng(); const plan = [];
-    if (r < 0.3 && this.G.withTag('photo').length) plan.push({ kind: 'goto', tags: ['photo'] }, { kind: 'photo', seconds: 14 + this.rng() * 30 });
-    const ends = ['streetEndW', 'streetEndE', 'streetEndN'].filter(t => this.G.withTag(t).length);
+    const r = this.rng(); const plan = []; const has = t => this.G.withTag(t).length > 0;
+    if (r < 0.3 && has('photo')) plan.push({ kind: 'goto', tags: ['photo'] }, { kind: 'photo', seconds: 14 + this.rng() * 30 });
+    else if (r < 0.38 && has('busStop')) plan.push({ kind: 'goto', tags: ['busStop'] }, { kind: 'linger', seconds: 25 + this.rng() * 60, look: new THREE.Vector3(20, 0, 8) });
+    const ends = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW'].filter(has);
     plan.push({ kind: 'goto', tags: ends.length ? [ends[Math.floor(this.rng() * ends.length)]] : ['street'], far: true }, { kind: 'despawn' });
     a.role = 'street'; a.plan = plan; a.stepIdx = -1; this._advance(a);
   }
   /** Enterer: → entrance → hall (→ ticket machine) → platform → wait → board. */
   planEnter(a, platform = null) {
     const plan = [];
-    if (!platform) { const cands = [4, 4, 4, 3, 3, 3, 1, 1, 2, 2].filter(p => this.has['platform' + p]); platform = cands.length ? cands[Math.floor(this.rng() * cands.length)] : null; }
-    if (a.app.tourist && this.rng() < 0.35 && this.G.withTag('ticketMachine').length) plan.push({ kind: 'goto', tags: ['ticketMachine'] }, { kind: 'linger', seconds: 5 + this.rng() * 8, look: new THREE.Vector3(TICKET_HALL.ticketMachines.x, TICKET_HALL.floor, 0), phone: false });
-    if (this.rng() < 0.12 && this.G.withTag('overlook').length) plan.push({ kind: 'goto', tags: ['overlook'] }, { kind: 'linger', seconds: 4 + this.rng() * 8, look: new THREE.Vector3(-26, LEVELS.jubUpper, -80) });
+    if (!platform) { const cands = [3, 3, 3, 4, 4, 4, 1, 1, 2, 2].filter(p => this.has['platform' + p]); platform = cands.length ? cands[Math.floor(this.rng() * cands.length)] : null; }
+    if (a.app.tourist && this.rng() < 0.35 && this.G.withTag('ticketMachine').length) plan.push({ kind: 'goto', tags: ['ticketMachine'] }, { kind: 'linger', seconds: 5 + this.rng() * 8, lookRel: new THREE.Vector3(-3, 0, 0), phone: false });
     if (platform) plan.push({ kind: 'wait', platform }); else plan.push({ kind: 'goto', tags: ['hall'] }, { kind: 'linger', seconds: 20 }, { kind: 'despawn' });
     a.role = 'enter'; a.plan = plan; a.stepIdx = -1; this._advance(a);
   }
@@ -156,11 +144,15 @@ class Population {
     const others = [1, 2, 3, 4].filter(p => p !== fromPlatform && this.has['platform' + p] && ((p <= 2) !== (fromPlatform <= 2)));
     if (r < 0.28 && others.length) { plan.push({ kind: 'wait', platform: others[Math.floor(this.rng() * others.length)] }); a.role = 'enter'; }
     else {
-      const exitTags = []; const tourist = a.app.tourist;
-      if (this.G.withTag('exit1').length && this.rng() < (tourist ? 0.7 : 0.35)) { exitTags.push('exit1'); if (this.G.withTag('photo').length && this.rng() < (tourist ? 0.8 : 0.3)) plan.push({ kind: 'goto', tags: ['exit1'], filter: n => n.tags.has('street') }, { kind: 'goto', tags: ['photo'] }, { kind: 'photo', seconds: 15 + this.rng() * 30 }); }
-      else if (this.G.withTag('embankment').length && this.rng() < 0.15) exitTags.push('embankment');
-      const ends = ['streetEndW', 'streetEndE'].filter(t => this.G.withTag(t).length); if (this.G.withTag('streetEndN').length && exitTags[0] === 'embankment') ends.push('streetEndN');
-      plan.push({ kind: 'goto', tags: ends.length ? [ends[Math.floor(this.rng() * ends.length)]] : (this.has.hall ? ['hall'] : ['box', 'dcPlatform']), far: true, viaTags: exitTags }, { kind: 'despawn' });
+      const tourist = a.app.tourist; const has = t => this.G.withTag(t).length > 0;
+      // exit choice: Bridge Street (4) is the main one; tourists favour Exit 3 (Big Ben) and the Embankment (1/2); Whitehall (5/6) for the offices
+      const choices = [['exit4', tourist ? 3 : 5], ['exit3', tourist ? 4 : 1.5], ['exit2', tourist ? 2 : 1.2], ['exit1', tourist ? 1.2 : 0.6], ['exit5', 1.2], ['exit6', 0.6]].filter(([t]) => t === 'exit4' ? has('entrance') : has(t));
+      let total = 0; for (const c of choices) total += c[1]; let pick = choices.length ? choices[0][0] : null; let rr = this.rng() * total; for (const c of choices) { rr -= c[1]; if (rr <= 0) { pick = c[0]; break; } }
+      if (pick === 'exit3' || pick === 'exit4' || pick === 'exit2') { if (has('photo') && this.rng() < (tourist ? 0.75 : 0.25)) plan.push({ kind: 'goto', tags: [pick === 'exit4' ? 'entrance' : pick], filter: n => n.tags.has('street') }, { kind: 'goto', tags: ['photo'], near: true }, { kind: 'photo', seconds: 15 + this.rng() * 30 }); }
+      else if (pick) plan.push({ kind: 'goto', tags: [pick], filter: n => n.tags.has('street') });
+      const ends = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW'].filter(has);
+      if (this.rng() < 0.12 && has('busStop')) plan.push({ kind: 'goto', tags: ['busStop'] }, { kind: 'linger', seconds: 20 + this.rng() * 50, look: new THREE.Vector3(20, 0, 8) });
+      plan.push({ kind: 'goto', tags: ends.length ? [ends[Math.floor(this.rng() * ends.length)]] : (this.has.hall ? ['hall'] : ['box', 'dcPlatform']), far: true }, { kind: 'despawn' });
       a.role = 'exit';
     }
     a.plan = plan; a.stepIdx = -1; this._advance(a);
@@ -170,7 +162,7 @@ class Population {
   /** Execute the next step of the plan. */
   _advance(a) {
     a.stepIdx++; const step = a.plan[a.stepIdx];
-    if (!step) { a.stepIdx = a.plan.length; a.plan = [{ kind: 'despawn' }]; a.stepIdx = 0; return this._advance(a); }
+    if (!step) { if (a.plan.length === 1 && a.plan[0].kind === 'despawn') { a.state = 'despawn'; return; } a.plan = [{ kind: 'despawn' }]; a.stepIdx = -1; return this._advance(a); }
     a.step = step; a.stepT = 0; a.lookAt = null;
     switch (step.kind) {
       case 'goto': {
@@ -178,20 +170,20 @@ class Population {
         for (const t of step.tags) for (const id of this.G.withTag(t)) if (!step.filter || step.filter(this.G.nodes[id])) cands.push(id);
         if (!cands.length) return this._advance(a);
         // prefer far targets for "leave the area" steps, random otherwise; try a few until a route exists
-        const order = step.far ? cands.slice().sort((p, q) => this._dist(a, q) - this._dist(a, p)) : cands.slice().sort(() => this.rng() - 0.5);
+        const order = step.far ? cands.slice().sort((p, q) => this._dist(a, q) - this._dist(a, p)) : step.near ? cands.slice().sort((p, q) => this._dist(a, p) - this._dist(a, q)) : cands.slice().sort(() => this.rng() - 0.5);
         for (const id of order.slice(0, 4)) { if (this._routeTo(a, id)) { target = id; break; } }
         if (target < 0) { a.failed = (a.failed || 0) + 1; if (a.failed > 2) { a.plan = [{ kind: 'despawn' }]; a.stepIdx = -1; } return this._advance(a); }
         a.state = 'walk'; break;
       }
       case 'wait': {
-        const spot = this._pickSpot(step.platform); if (!spot) { a.plan.splice(a.stepIdx + 1, 0, { kind: 'linger', seconds: 5 }); return this._advance(a); }
+        const spot = this._pickSpot(step.platform); if (!spot) { a.waitRetries = (a.waitRetries || 0) + 1; if (a.waitRetries > 6) { a.plan = [{ kind: 'despawn' }]; a.stepIdx = -1; return this._advance(a); } a.plan.splice(a.stepIdx, 0, { kind: 'linger', seconds: 4 + this.rng() * 4 }); a.stepIdx--; return this._advance(a); }
         // route to the platform node nearest the spot, then to the spot itself
         const near = this.G.nearest(spot.x, spot.y, spot.z, { maxDist: 40, yTol: 1, filter: n => n.tags.has('platform' + step.platform) });
         if (near < 0 || !this._routeTo(a, near)) { a.failed = (a.failed || 0) + 1; if (a.failed > 2) { a.plan = [{ kind: 'despawn' }]; a.stepIdx = -1; } return this._advance(a); }
         const sp = new THREE.Vector3(spot.x, spot.y, spot.z); sp.meta = { reach: 0.3, slow: 0.8 }; a.path.push(sp);
         spot.agent = a; a.waitSpot = spot; a.platform = step.platform; a.state = 'walk'; break;
       }
-      case 'linger': case 'photo': { a.state = step.kind === 'photo' ? 'photo' : 'linger'; a.timer = step.seconds; if (step.look) a.lookAt = step.look; if (step.kind === 'photo') { a.lookAt = BIG_BEN; a.nextFidget = 0.2; } break; }
+      case 'linger': case 'photo': { a.state = step.kind === 'photo' ? 'photo' : 'linger'; a.timer = step.seconds; if (step.look) a.lookAt = step.look; if (step.lookRel) a.lookAt = a.pos.clone().add(step.lookRel); if (step.kind === 'photo') { a.lookAt = BIG_BEN; a.nextFidget = 0.2; } break; }
       case 'staff': { a.state = 'staff'; a.timer = 8 + this.rng() * 20; break; }
       case 'despawn': { a.state = 'despawn'; break; }
       default: return this._advance(a);
@@ -205,12 +197,12 @@ class Population {
     switch (a.state) {
       case 'walk': case 'pause': {
         // stuck detection: not moving while wanting to walk
-        if (a.state === 'walk' && a.selfSpeed < 0.12 && !a.onEsc) { a.stuck = (a.stuck || 0) + dt; if (a.stuck > 5) { a.stuck = 0; a._nextWaypoint(true); a.stuckCount = (a.stuckCount || 0) + 1; if (a.stuckCount > 3) { a.state = 'despawn'; } } } else a.stuck = 0;
+        if (a.state === 'walk' && a.selfSpeed < 0.12 && !a.onEsc) { a.stuck = (a.stuck || 0) + dt; if (a.stuck > (a.floor ? 3 : 1.2)) { a.stuck = 0; a._nextWaypoint(true); a.stuckCount = (a.stuckCount || 0) + 1; if (a.stuckCount > 3) { a.state = 'despawn'; } } } else a.stuck = 0;
         break;
       }
       case 'idle': {
         // arrived at the end of the path
-        if (a.step && a.step.kind === 'wait') { a.state = 'waiting'; a.lookAt = a.waitSpot ? a.waitSpot.face : null; a.user.tunnelYaw = a.waitSpot ? this._relYaw(a, a.waitSpot.tunnel) : 0; a.user.indicatorYaw = (this.rng() < 0.5 ? -0.8 : 0.8); a.nextFidget = 0.5; a.timer = 0; }
+        if (a.step && a.step.kind === 'wait') { a.state = 'waiting'; a.lookAt = a.waitSpot ? a.waitSpot.face : null; a.user.tunnelYaw = a.waitSpot ? this._relYaw(a, a.waitSpot.tunnelYaw) : 0; a.user.indicatorYaw = (this.rng() < 0.5 ? -0.8 : 0.8); a.nextFidget = 0.5; a.timer = 0; }
         else if (a.step && a.step.kind === 'board') { this.stats.boarded++; a.state = 'despawn'; }
         else if (a.step && a.step.kind === 'alightOut') { this.planExit(a, a.step.platform); }
         else this._advance(a);
@@ -240,19 +232,19 @@ class Population {
     const T = this.targets;
     for (let i = 0; i < T.street * 0.7; i++) this._spawnStreet(true);
     for (let i = 0; i < T.enter * 0.6; i++) this._spawnEnterer(true);
-    for (const p of [4, 3, 1, 2]) { if (!this.has['platform' + p]) continue; for (let i = 0; i < T.wait[p] * 0.8; i++) this._spawnWaiting(p); }
+    for (const p of [3, 4, 1, 2]) { if (!this.has['platform' + p]) continue; for (let i = 0; i < T.wait[p] * 0.8; i++) this._spawnWaiting(p); }
     this._spawnStaff();
     for (let i = 0; i < T.photo * 0.6; i++) this._spawnPhoto();
   }
   _spawnStreet(preseed = false) {
-    const starts = ['streetEndW', 'streetEndE', 'streetEndN'].map(t => this.G.withTag(t)).flat(); if (!starts.length) return null;
+    const starts = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW'].map(t => this.G.withTag(t)).flat(); if (!starts.length) return null;
     const id = starts[Math.floor(this.rng() * starts.length)]; const n = this.G.nodes[id];
     const a = this._make(n.x + (this.rng() - 0.5) * 2, n.y, n.z + (this.rng() - 0.5) * 1.5, { tourist: 0.45, child: 0.05 }); if (!a) return null;
     this.planStreet(a); if (preseed) this._skipAhead(a); return a;
   }
   _spawnEnterer(preseed = false) {
     const ext = this.ctx.get('spawn:street'); let x, y, z;
-    const starts = ['streetEndW', 'streetEndE', 'streetEndN', 'exit1'].map(t => this.G.withTag(t)).flat();
+    const starts = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW', 'exit3', 'exit2'].map(t => this.G.withTag(t)).flat().filter(id => this.G.nodes[id].tags.has('street'));
     if (Array.isArray(ext) && ext.length && this.rng() < 0.5) { const s = ext[Math.floor(this.rng() * ext.length)]; x = s.x; y = s.y ?? 0; z = s.z; }
     else if (starts.length) { const n = this.G.nodes[starts[Math.floor(this.rng() * starts.length)]]; x = n.x + (this.rng() - 0.5) * 2; y = n.y; z = n.z; }
     else { const h = this.G.withTag('hall'); if (!h.length) return null; const n = this.G.nodes[h[Math.floor(this.rng() * h.length)]]; x = n.x; y = n.y; z = n.z; }
@@ -267,18 +259,10 @@ class Population {
   _spawnPhoto() {
     const ids = this.G.withTag('photo'); if (!ids.length) return null; const n = this.G.nodes[ids[Math.floor(this.rng() * ids.length)]];
     const a = this._make(n.x + (this.rng() - 0.5) * 1.5, n.y, n.z + (this.rng() - 0.5) * 1, { tourist: 0.9 }); if (!a) return null;
-    a.role = 'street'; a.plan = [{ kind: 'photo', seconds: 10 + this.rng() * 30 }, { kind: 'goto', tags: ['streetEndW', 'streetEndE'].filter(t => this.G.withTag(t).length), far: true }, { kind: 'despawn' }]; a.stepIdx = -1; this._advance(a); return a;
+    a.role = 'street'; a.plan = [{ kind: 'photo', seconds: 10 + this.rng() * 30 }, { kind: 'goto', tags: ['streetEndW', 'streetEndE', 'streetEndN'].filter(t => this.G.withTag(t).length), far: true }, { kind: 'despawn' }]; a.stepIdx = -1; this._advance(a); return a;
   }
   _spawnStaff() {
-    const H = TICKET_HALL.floor;
-    const posts = [
-      { x: gateX(GATE.wideGateIndex) - 1.6, y: H, z: GATE.z + 2.0, look: new THREE.Vector3(gateX(GATE.wideGateIndex) - 1.6, H, GATE.z + 12) },
-      { x: -19.5, y: H, z: -47.5, look: new THREE.Vector3(-19.5, H, -30) },
-      { x: -36.3, y: LEVELS.jubUpper, z: -74, look: new THREE.Vector3(-36.3, LEVELS.jubUpper, -100) },
-      { x: -36.3, y: LEVELS.jubLower, z: -70, look: new THREE.Vector3(-36.3, LEVELS.jubLower, -95) },
-      { x: -4, y: LEVELS.dcPlatform, z: 5.2, look: new THREE.Vector3(20, LEVELS.dcPlatform, 5.2) },
-    ];
-    for (const p of posts) { const f = this.ctx.collision.floorAt(p.x, p.z, p.y + 0.5, { stepUp: 0.6, drop: 1.2 }); if (!f || Math.abs(f.y - p.y) > 0.3) continue; const a = this._make(p.x, p.y, p.z, { staff: true }); if (!a) continue; a.heading = Math.atan2(p.look.x - p.x, p.look.z - p.z); a.headingTarget = a.heading; this.planStaff(a, p); }
+    for (const p of staffPosts()) { const f = this.ctx.collision.floorAt(p.x, p.z, p.y + 0.5, { stepUp: 0.6, drop: 1.2 }); if (!f || Math.abs(f.y - p.y) > 0.3) continue; const a = this._make(p.x, p.y, p.z, { staff: true }); if (!a) continue; a.heading = Math.atan2(p.look.x - p.x, p.look.z - p.z); a.headingTarget = a.heading; this.planStaff(a, p); }
   }
   /** Teleport a freshly planned walker part-way along its path so the station looks lived-in from frame one. */
   _skipAhead(a) {
@@ -322,14 +306,12 @@ class Population {
   /** Door approach / sill points on the platform side of a stopped train. */
   _doors(e) {
     const train = e.train; const spec = this._specOf(e); if (!train || !train.group) return [];
-    train.group.updateMatrixWorld(true); const floorY = train.floorY ?? spec.floorHeight; const platY = this._platY(e); const jub = String(e.track).startsWith('jubilee');
+    train.group.updateMatrixWorld(true); const floorY = train.floorY ?? spec.floorHeight; const platY = this._platY(e);
     const out = []; const v = new THREE.Vector3();
     for (const d of doorPositions(spec)) {
       for (const side of [-1, 1]) {
         const p = train.group.localToWorld(v.set(side * (spec.width / 2 + 1.15), floorY, -d.s).clone());
-        const ok = jub ? (p.x > JUBILEE.platformXMin - 0.3 && p.x < JUBILEE.platformXMax + 0.3 && p.z > JUBILEE.zMin + 2 && p.z < JUBILEE.zMax - 2)
-          : (p.z > DISTRICT.platforms[e.platform].zMin - 0.3 && p.z < DISTRICT.platforms[e.platform].zMax + 0.3 && p.x > DISTRICT.xMin + 2 && p.x < DISTRICT.xMax - 2);
-        if (!ok) continue;
+        if (!onPlatform(e.track, e.platform, p.x, p.z)) continue;
         const sill = train.group.localToWorld(v.set(side * (spec.width / 2 - 0.5), floorY, -d.s).clone());
         const inside = train.group.localToWorld(v.set(side * (spec.width / 2 - 0.5) * 0.3, floorY, -d.s).clone());
         out.push({ approach: new THREE.Vector3(p.x, platY, p.z), sill: new THREE.Vector3(sill.x, platY, sill.z), inside: new THREE.Vector3(inside.x, platY, inside.z), s: d.s, side, boarders: 0, width: d.width });
@@ -342,7 +324,7 @@ class Population {
     const train = e.train; if (!train || !train.group || this.riders.has(train)) return;
     const spec = this._specOf(e); const list = []; const n = Math.min(10, 3 + Math.floor(this.rng() * 8)); const L = spec.carLength.reduce((a, b) => a + b, 0);
     for (let i = 0; i < n; i++) {
-      const local = new THREE.Vector3((this.rng() - 0.5) * (spec.width - 1.3), train.floorY ?? spec.floorHeight, (this.rng() - 0.5) * (L - 6));
+      const local = new THREE.Vector3((this.rng() - 0.5) * 0.7, train.floorY ?? spec.floorHeight, (this.rng() - 0.5) * (L - 6));
       const a = this._make(0, 0, 0, { tourist: 0.2 }); if (!a) break; a.role = 'rider'; a.state = 'rider'; a.train = train; a.local = local; a.localYaw = this.rng() * Math.PI * 2; a.lookAt = null; a.plan = [{ kind: 'rider' }]; a.stepIdx = 0; a.step = a.plan[0]; a.skipWalls = true;
       list.push(a);
     }
@@ -419,12 +401,7 @@ class Population {
       const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200; out.disconnect(); out.connect(lp);
       return { output: lp, start() { src.start(); bands.forEach(l => l.start()); }, stop() { try { src.stop(); bands.forEach(l => l.stop()); } catch (e) {} }, set(k, v) { if (k === 'level') out.gain.setTargetAtTime(v, c.currentTime, 0.5); } };
     });
-    const spots = [
-      [0, TICKET_HALL.floor + 1.5, -24], [-20, TICKET_HALL.floor + 1.5, -36],
-      [-36, LEVELS.jubUpper + 1.5, -80], [-36, LEVELS.jubLower + 1.5, -80], [-22, LEVELS.jubUpper + 1.5, -90],
-      [-9, LEVELS.dcPlatform + 1.5, 5.5], [-9, LEVELS.dcPlatform + 1.5, 18.5],
-      [0, 1.5, 2.5], [4, 1.5, 33],
-    ];
+    const spots = murmurSpots();
     for (const [x, y, z] of spots) { try { const em = audio.emitter({ position: new THREE.Vector3(x, y, z), synth: 'npc:murmur', params: { level: 0.2 }, gain: 0.0, refDistance: 4, maxDistance: 30, rolloff: 1.2 }); this.murmur.push({ em, pos: new THREE.Vector3(x, y, z) }); } catch (e) { console.warn('[npcs] murmur emitter', e); } }
   }
   _updateMurmur() {

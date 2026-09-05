@@ -2,8 +2,7 @@
 // npcBehaviour.js — navigation + locomotion for the passengers.
 //
 //  NavGraph            waypoint graph with directed edges and A*.
-//  buildDefaultGraph   a full station graph derived ONLY from layout.js (street → stairs → hall →
-//                      gateline → overlook → escalators → box landings → platforms; District stairs; pavements).
+//  (buildDefaultGraph lives in npcGraph.js — the station graph derived only from layout.js)
 //  attachEscalators    discovers every moving ramp registered in the collision world (whatever module built it)
 //                      and adds one-way "ride" edges in the direction the steps travel.
 //  validateGraph       drops default edges that have no floor beneath them / run through walls, so the
@@ -13,7 +12,6 @@
 //                      escalator riding (stand right / walk left), stairs, gait phase, idle fidgets, head look.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
-import { LEVELS, STREET, TICKET_HALL, DISTRICT, JUBILEE, BOX_WALKWAYS } from '../core/layout.js';
 
 // ============================================================================ NavGraph
 export class NavGraph {
@@ -58,130 +56,6 @@ export class NavGraph {
     }
     return null;
   }
-}
-
-// ============================================================================ default graph from layout
-const GATE = TICKET_HALL.gateline;
-export const GATE_PITCH = (GATE.xMax - GATE.xMin) / GATE.gates;
-export const gateX = i => GATE.xMin + (i + 0.5) * GATE_PITCH;
-export const BIG_BEN = new THREE.Vector3(STREET.elizabethTower.x, STREET.elizabethTower.clockHeight, STREET.elizabethTower.z);
-
-export function buildDefaultGraph() {
-  const G = new NavGraph(); const H = LEVELS.ticketHall, S = LEVELS.street;
-  const N = (x, y, z, tags, area) => G.add(x, y, z, tags, area);
-  const chain = (ids, opts) => { for (let i = 1; i < ids.length; i++) G.link(ids[i - 1], ids[i], opts); };
-
-  // ---------------- street: north pavement (Portcullis House side), south pavement (Palace side), crossings
-  const zN = (STREET.pavementNorth.zMin + STREET.pavementNorth.zMax) / 2 + 0.5;      // 2.5
-  const zS = (STREET.pavementSouth.zMin + STREET.pavementSouth.zMax) / 2 + 0.3;      // 31.8
-  const xsN = [-58, -46, -34, -22, -12, -5, 0, 5, 12, 22, 32, 42];
-  const north = xsN.map(x => N(x, S, zN, ['street', 'pavementN'], 'street'));
-  chain(north); G.tag(north[0], 'streetEndW'); G.tag(north[north.length - 1], 'streetEndE');
-  const xsS = [-58, -46, -34, -22, -12, -4, 2, 6, 12, 20, 30, 42];
-  const south = xsS.map(x => N(x, S, zS, ['street', 'pavementS'], 'street'));
-  chain(south); G.tag(south[0], 'streetEndW'); G.tag(south[south.length - 1], 'streetEndE');
-  // photo spots by Exit 1, looking at Big Ben
-  const photo = [[-3, 33.4], [1, 33.8], [-8, 33.2], [12, 33.6], [-14, 33.5], [16, 33.2]].map(([x, z]) => N(x, S, z, ['street', 'photo'], 'street'));
-  photo.forEach((p, i) => { G.link(p, G.nearest(G.nodes[p].x, S, zS, { filter: n => n.tags.has('pavementS') })); });
-  // pedestrian crossings over Bridge Street (west of the entrance towards the Abbey / Parliament Square, and at the bridge end)
-  for (const cx of [-12, 42]) {
-    const a = north[xsN.indexOf(cx)], b = south[xsS.indexOf(cx)];
-    const mids = [10, 17, 24].map(z => N(cx, S, z, ['street', 'crossing'], 'street'));
-    chain([a, ...mids, b]);
-  }
-  // ---------------- Bridge Street entrance + main stairs (descend NORTH from the facade line; keep left going down)
-  const ms = TICKET_HALL.mainStairs;
-  const ent = N(STREET.entranceMain.x, S, zN - 1.2, ['street', 'entrance'], 'street'); G.link(ent, north[xsN.indexOf(0)]); G.link(ent, north[xsN.indexOf(-5)]); G.link(ent, north[xsN.indexOf(5)]);
-  const laneW = (ms.xMin + ms.xMax) / 2 - 2.6, laneE = (ms.xMin + ms.xMax) / 2 + 2.6;
-  const topW = N(laneW, S, ms.zTop - 0.2, ['stairTop', 'mainStairs'], 'stairs'), topE = N(laneE, S, ms.zTop - 0.2, ['stairTop', 'mainStairs'], 'stairs');
-  const botW = N(laneW, H, ms.zBottom - 1.2, ['stairBottom', 'mainStairs', 'hall'], 'ticketHall'), botE = N(laneE, H, ms.zBottom - 1.2, ['stairBottom', 'mainStairs', 'hall'], 'ticketHall');
-  G.link(ent, topW); G.link(ent, topE);
-  G.link(topW, botW, { oneWay: true, kind: 'stairs' }); G.link(botE, topE, { oneWay: true, kind: 'stairs' });   // down on the west (left) lane, up on the east lane
-  G.link(topW, botW, { oneWay: false, kind: 'stairs', cost: 40 }); G.link(topE, botE, { kind: 'stairs', cost: 40 });   // wrong-lane fallbacks (expensive)
-  // ---------------- Exit 1 stairs (rise SOUTH to the Palace-side pavement facing Big Ben)
-  const e1 = TICKET_HALL.exit1Stairs; const e1W = (e1.xMin + e1.xMax) / 2 - 1.5, e1E = (e1.xMin + e1.xMax) / 2 + 1.5;
-  const e1TopW = N(e1W, S, e1.zTop + 1.4, ['stairTop', 'exit1', 'street'], 'street'), e1TopE = N(e1E, S, e1.zTop + 1.4, ['stairTop', 'exit1', 'street'], 'street');
-  const e1BotW = N(e1W, H, e1.zBottom - 1.4, ['stairBottom', 'exit1', 'hall'], 'ticketHall'), e1BotE = N(e1E, H, e1.zBottom - 1.4, ['stairBottom', 'exit1', 'hall'], 'ticketHall');
-  G.link(e1BotE, e1TopE, { oneWay: true, kind: 'stairs' }); G.link(e1TopW, e1BotW, { oneWay: true, kind: 'stairs' });   // going up (facing south) keep left = east lane
-  G.link(e1BotE, e1TopE, { kind: 'stairs', cost: 40 }); G.link(e1TopW, e1BotW, { kind: 'stairs', cost: 40 });
-  for (const t of [e1TopW, e1TopE]) { G.link(t, south[xsS.indexOf(6)]); G.link(t, south[xsS.indexOf(2)]); G.link(t, south[xsS.indexOf(12)]); }
-  // ---------------- Embankment stairs (Exit 3/5), east of Portcullis House
-  const em = TICKET_HALL.embankmentStairs; const emTop = N(em.xMax + 1.6, S, em.zTop, ['street', 'embankment', 'stairTop'], 'street'); const emBot = N(em.xMin - 1.4, H, em.zBottom, ['hall', 'embankment', 'stairBottom'], 'ticketHall');
-  G.link(emTop, emBot, { kind: 'stairs' });
-  const emPave = [N(STREET.embankmentRoad.xMin + 2, S, -2, ['street'], 'street'), N(STREET.embankmentRoad.xMin + 2, S, -20, ['street', 'streetEndN'], 'street')];
-  G.link(emTop, emPave[0]); chain(emPave); G.link(emPave[0], north[xsN.indexOf(32)]);
-
-  // ---------------- ticket hall: a coarse grid, minus the stair wells, the ticket machines and the box opening
-  const xs = [-40, -32, -24, -16, -8, 0, 8, 16, 22], zs = [-46, -38, -30, -24, -16, -8, 0, 8, 16, 24, 30];
-  const inRect = (x, z, r) => x > r.xMin - 0.5 && x < r.xMax + 0.5 && z > Math.min(r.zTop, r.zBottom) - 0.5 && z < Math.max(r.zTop, r.zBottom) + 0.5;
-  const wells = [ms, e1, ...TICKET_HALL.dcStairs];
-  const tm = TICKET_HALL.ticketMachines;
-  const grid = new Map();
-  for (const x of xs) for (const z of zs) {
-    if (wells.some(w => inRect(x, z, w))) continue;
-    if (x >= tm.x - 3 && z >= tm.zMin - 2 && z <= tm.zMax + 2) continue;
-    const bo = TICKET_HALL.boxOverlook; if (x > bo.xMin - 2 && x < bo.xMax + 2 && z < bo.zMax + 3) continue;
-    const tags = ['hall']; if (z < GATE.z) tags.push('paid'); else tags.push('unpaid');
-    if (x === 16 && (z === -8 || z === 0)) tags.push('ticketMachine');
-    grid.set(x + ',' + z, N(x, H, z, tags, 'ticketHall'));
-  }
-  const crossesGateline = (x1, z1, x2, z2) => (z1 - GATE.z) * (z2 - GATE.z) < 0;
-  for (const x of xs) for (const z of zs) {
-    const a = grid.get(x + ',' + z); if (a == null) continue;
-    const nx = xs[xs.indexOf(x) + 1], nz = zs[zs.indexOf(z) + 1];
-    const tryLink = (x2, z2) => {
-      const b = grid.get(x2 + ',' + z2); if (b == null) return;
-      if (crossesGateline(x, z, x2, z2)) { if (x !== x2 || x < GATE.xMin - 0.5 || x > GATE.xMax + 0.5) return; G.link(a, b, { kind: 'gate' }); return; }
-      G.link(a, b);
-    };
-    if (nx != null) tryLink(nx, z); if (nz != null) tryLink(x, nz);
-    if (nx != null && nz != null) tryLink(nx, nz); if (nx != null && zs.indexOf(z) > 0) tryLink(nx, zs[zs.indexOf(z) - 1]);
-  }
-  const hallNear = (x, z, maxDist = 12) => G.nearest(x, H, z, { maxDist, filter: n => n.tags.has('hall') && !n.tags.has('stairBottom') });
-  for (const b of [botW, botE]) { for (const [x, z] of [[-8, -16], [0, -16], [8, -16], [-8, -8], [8, -8]]) { const n = grid.get(x + ',' + z); if (n != null) G.link(b, n); } }
-  for (const b of [e1BotW, e1BotE]) { for (const [x, z] of [[0, 16], [8, 16], [16, 16], [0, 24], [16, 24]]) { const n = grid.get(x + ',' + z); if (n != null) G.link(b, n); } }
-  G.link(emBot, grid.get('22,-8') ?? hallNear(22, -8)); G.link(emBot, grid.get('16,-8'));
-  // box overlook (balustrade) — a place to linger and look down into the box
-  const look = [N(-26, H, -44.5, ['hall', 'paid', 'overlook'], 'ticketHall'), N(-34, H, -44.5, ['hall', 'paid', 'overlook'], 'ticketHall')];
-  look.forEach(l => { G.link(l, grid.get('-24,-46') ?? hallNear(-24, -46)); G.link(l, grid.get('-32,-46') ?? hallNear(-32, -46)); G.link(l, grid.get('-40,-46') ?? hallNear(-40, -46)); });
-  // top landing area of the Jubilee escalators (bank A) — the escalator entries attach here dynamically
-  const escTop = N(-16, H, -47.5, ['hall', 'paid', 'escTopArea'], 'ticketHall'); G.link(escTop, grid.get('-16,-46') ?? hallNear(-16, -46)); G.link(escTop, grid.get('-8,-46') ?? hallNear(-8, -46)); G.link(escTop, grid.get('-24,-46') ?? hallNear(-24, -46));
-  // District stairs: from the hall grid down to each platform
-  const dcBottoms = {};
-  for (const st of TICKET_HALL.dcStairs) {
-    const x = (st.xMin + st.xMax) / 2; const dirS = st.zBottom > st.zTop ? 1 : -1;
-    const top = N(x, H, st.zTop - dirS * 1.3, ['hall', 'dcStairTop'], 'ticketHall'); const bot = N(x, LEVELS.dcPlatform, st.zBottom + dirS * 0.9, ['platform' + st.platform, 'dcStairBottom'], 'district');
-    G.link(top, bot, { kind: 'stairs' });
-    const near = [];
-    for (const [gx, gz] of [[x - 2, st.zTop - dirS * 8], [x + 2, st.zTop - dirS * 8], [x, st.zTop - dirS * 8]]) { const n = hallNear(gx, gz, 9); if (n != null && !near.includes(n)) near.push(n); }
-    near.forEach(n => G.link(top, n));
-    (dcBottoms[st.platform] = dcBottoms[st.platform] || []).push(bot);
-  }
-  // ---------------- District & Circle platforms (y = dcPlatform): a chain along each platform behind the yellow line
-  for (const p of Object.values(DISTRICT.platforms)) {
-    const edge = p.edgeZ; const inward = p.zMin === edge ? 1 : -1;    // platform 2's edge is its zMin (track to the north of it)
-    const zc = edge + inward * 2.6;
-    const xsP = [-64, -52, -40, -28, -16, -4, 8, 20, 32, 44, 54];
-    const ids = xsP.map(x => N(x, LEVELS.dcPlatform, zc, ['platform' + p.number, 'dcPlatform'], 'district')); chain(ids);
-    for (const b of (dcBottoms[p.number] || [])) { const nb = G.nodes[b]; const near = ids.filter(i => Math.abs(G.nodes[i].x - nb.x) < 8); near.forEach(i => G.link(b, i)); }
-  }
-  // ---------------- Jubilee box: upper level (landing + bridge) and lower landing, platforms 4 (upper) and 3 (lower)
-  const up = LEVELS.jubUpper, lo = LEVELS.jubLower; const px = (JUBILEE.platformXMin + JUBILEE.platformXMax) / 2 + 0.3;  // -35.6 (stand a little back from the PEDs)
-  const upperLanding = [N(-16, up, -91, ['box', 'upperLanding'], 'box'), N(-24, up, -96, ['box', 'upperLanding'], 'box'), N(-30, up, -90, ['box', 'upperLanding'], 'box'), N(-20, up, -104, ['box', 'upperLanding'], 'box'), N(-30, up, -104, ['box', 'upperLanding'], 'box'), N(-16, up, -84, ['box', 'upperLanding'], 'box'), N(-26, up, -84, ['box', 'upperLanding'], 'box')];
-  chain(upperLanding); G.link(upperLanding[0], upperLanding[2]); G.link(upperLanding[1], upperLanding[4]); G.link(upperLanding[0], upperLanding[6]); G.link(upperLanding[5], upperLanding[2]); G.link(upperLanding[1], upperLanding[6]); G.link(upperLanding[3], upperLanding[1]);
-  const upperBridge = [N(-16, up, -62, ['box', 'upperBridge'], 'box'), N(-24, up, -62, ['box', 'upperBridge'], 'box'), N(-30, up, -58.5, ['box', 'upperBridge'], 'box'), N(-20, up, -66, ['box', 'upperBridge'], 'box')];
-  chain(upperBridge); G.link(upperBridge[0], upperBridge[3]); G.link(upperBridge[1], upperBridge[3]);
-  const lowerLanding = [N(-16, lo, -83, ['box', 'lowerLanding'], 'box'), N(-24, lo, -80, ['box', 'lowerLanding'], 'box'), N(-30, lo, -80, ['box', 'lowerLanding'], 'box'), N(-20, lo, -87, ['box', 'lowerLanding'], 'box'), N(-28, lo, -86, ['box', 'lowerLanding'], 'box')];
-  chain(lowerLanding); G.link(lowerLanding[0], lowerLanding[3]); G.link(lowerLanding[1], lowerLanding[4]); G.link(lowerLanding[3], lowerLanding[4]); G.link(lowerLanding[2], lowerLanding[4]);
-  // platform chains (both levels) with access from the landings / bridge
-  const zsJ = [-132, -122, -112, -104, -96, -88, -80, -72, -64, -56, -48, -40, -30, -22];
-  const p4 = zsJ.map(z => N(px, up, z, ['platform4', 'jubPlatform'], 'jubilee')); chain(p4);
-  const p3 = zsJ.map(z => N(px, lo, z, ['platform3', 'jubPlatform'], 'jubilee')); chain(p3);
-  const linkAccess = (ids, from, zRange) => { for (const i of ids) { const z = G.nodes[i].z; if (z >= zRange[0] && z <= zRange[1]) for (const f of from) if (Math.abs(G.nodes[f].z - z) < 12) G.link(i, f); } };
-  linkAccess(p4, [upperLanding[2], upperLanding[4], upperLanding[6]], [BOX_WALKWAYS[0].zMin, BOX_WALKWAYS[0].zMax]);
-  linkAccess(p4, [upperBridge[2], upperBridge[1]], [BOX_WALKWAYS[1].zMin, BOX_WALKWAYS[1].zMax]);
-  linkAccess(p3, [lowerLanding[2], lowerLanding[4], lowerLanding[1]], [BOX_WALKWAYS[2].zMin, BOX_WALKWAYS[2].zMax]);
-  return G;
 }
 
 // ============================================================================ escalators from the collision world
@@ -341,8 +215,9 @@ export class Agent {
       if (Math.abs(dy) < 0.03 || this.floor === support.floor) this.pos.y = support.y; else this.pos.y += dy * Math.min(1, dt * 16);
       this.floor = support.floor;
     } else if (!this.skipWalls) {
-      // nothing beneath (module not loaded here / stepped off the world): step back and stop
+      // nothing beneath (module not loaded here / stepped off a slab edge): step back, stop, and drift back towards the last waypoint we came from
       this.pos.x = prevX; this.pos.z = prevZ; this.vel.set(0, 0, 0); this.floor = null;
+      const back = this.pathIdx > 0 ? this.path[this.pathIdx - 1] : null; if (back) { const bx = back.x - this.pos.x, bz = back.z - this.pos.z; const bd = Math.hypot(bx, bz) || 1; this.pos.x += bx / bd * 0.4 * dt; this.pos.z += bz / bd * 0.4 * dt; }
     }
     this.onEsc = !!(this.floor && this.floor.move);
     // ---- gait
@@ -424,7 +299,12 @@ export function pathToWaypoints(G, ids, opts = {}) {
     const n = G.nodes[ids[i]]; const v = new THREE.Vector3(n.x, n.y, n.z); v.node = n.id;
     if (i > 0) { const e = G.edge(ids[i - 1], ids[i]); v.edge = e; }
     // jitter: don't all walk the same line (except escalators / stairs / gates)
-    const e = v.edge; if (opts.jitter && (!e || e.kind === 'walk') && !n.tags.has('escEntry') && !n.tags.has('escExit') && !n.tags.has('stairTop') && !n.tags.has('stairBottom')) { v.x += (opts.rng() - 0.5) * 2 * opts.jitter; v.z += (opts.rng() - 0.5) * 2 * opts.jitter; }
+    const e = v.edge; const next = ids[i + 1] != null ? G.edge(ids[i], ids[i + 1]) : null;
+    if (opts.jitter && (!e || e.kind === 'walk') && (!next || next.kind === 'walk') && !n.tags.has('escEntry') && !n.tags.has('escExit') && !n.tags.has('stairTop') && !n.tags.has('stairBottom') && !n.tags.has('passage')) {
+      const jx = (opts.rng() - 0.5) * 2 * opts.jitter, jz = (opts.rng() - 0.5) * 2 * opts.jitter;
+      // only jitter onto real floor (narrow slabs / passages keep people on the centreline)
+      if (!opts.collision || opts.collision.floorAt(v.x + jx, v.z + jz, v.y + 0.5, { stepUp: 0.6, drop: 1.2 })) { v.x += jx; v.z += jz; }
+    }
     pts.push(v);
   }
   return pts;
