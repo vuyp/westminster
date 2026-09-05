@@ -22,11 +22,13 @@ const DEPART_DIST = 380;     // metres after the stop where it is removed
 const SERVICES = {
   jubileeUpper: { headway: 150, first: 22, stock: STOCK_1996, line: 'jubilee', destinations: [['Stratford', 8, 'jubilee'], ['North Greenwich', 2, 'jubilee']] },
   jubileeLower: { headway: 150, first: 85, stock: STOCK_1996, line: 'jubilee', destinations: [['Stanmore', 6, 'jubilee'], ['Willesden Green', 2, 'jubilee'], ['Wembley Park', 2, 'jubilee']] },
-  districtEB: { headway: 165, first: 48, stock: STOCK_S7, line: 'district', destinations: [['Upminster', 4, 'district'], ['Barking', 2, 'district'], ['Tower Hill', 1, 'district'], ['Edgware Road', 3, 'circle']] },
-  districtWB: { headway: 165, first: 118, stock: STOCK_S7, line: 'district', destinations: [['Ealing Broadway', 3, 'district'], ['Richmond', 3, 'district'], ['Wimbledon', 3, 'district'], ['Hammersmith', 3, 'circle']] },
+  // District & Circle (dossier §9.2): eastbound Circle trains run to Hammersmith via Tower Hill / Liverpool Street; westbound Circle trains to Edgware Road via Victoria.
+  districtEB: { headway: 140, first: 48, stock: STOCK_S7, line: 'district', destinations: [['Upminster', 5, 'district'], ['Barking', 2, 'district'], ['Dagenham East', 1, 'district'], ['Tower Hill', 2, 'district'], ['Hammersmith', 3, 'circle']] },
+  districtWB: { headway: 140, first: 118, stock: STOCK_S7, line: 'district', destinations: [['Wimbledon', 3, 'district'], ['Richmond', 3, 'district'], ['Ealing Broadway', 3, 'district'], ['Edgware Road', 1, 'district'], ['Edgware Road', 3, 'circle']] },
 };
 
-const CIRCLE_VIA = { 'Edgware Road': 'via Tower Hill', 'Hammersmith': 'via Victoria' };
+// Circle line 'via' phrasing as spoken on the train and abbreviated on the indicators (dossier §9.5, §10.5)
+const CIRCLE_VIA = { Hammersmith: { spoken: 'via Liverpool Street and King\'s Cross St. Pancras', board: 'Circle via Tower Hill' }, 'Edgware Road': { spoken: 'via Victoria and Paddington', board: 'Edgware Rd via Victoria' } };
 
 class TrainService {
   constructor(ctx, trainsMod, announcements) {
@@ -76,8 +78,8 @@ class TrainService {
     const t = { train, line, spec, destination: item.destination, state: 'approaching', s: line.track.stopS - APPROACH_DIST, v: spec.maxSpeed, accel: 0, eta: 0, timer: 0, announced: {}, blockers: [] };
     t.length = trainLength(spec);
     train.destination = item.destination.name;
-    if (train.setDestination) train.setDestination(item.destination.line === 'circle' ? `Circle line ${CIRCLE_VIA[item.destination.name] || ''}`.trim() : item.destination.name);
-    if (train.setDisplay) train.setDisplay(this._text('arriving', t) || `Westminster`);
+    if (train.setDestination) train.setDestination(item.destination.line === 'circle' ? (CIRCLE_VIA[item.destination.name] ? CIRCLE_VIA[item.destination.name].board : 'Circle line') : item.destination.name);
+    if (train.setDisplay) train.setDisplay('Next station: Westminster');
     this.ctx.scene.add(train.group);
     this._place(t);
     this.trains.push(t); line.active = t;
@@ -134,7 +136,6 @@ class TrainService {
         t.eta = t.v > 0.1 ? remain / Math.max(t.v, 1) : 0;
         if (!t.announced.arrivingPA && remain < 320) { t.announced.arrivingPA = true; this.emit('arriving', this._evt(t)); }
         if (!t.announced.wind && remain < 190) { t.announced.wind = true; const p = track.pointAt(stopS - 40); this.ctx.audio.play('tunnelWind', { position: p, gain: 0.9, params: { seconds: 7 }, refDistance: 6, maxDistance: 80 }); }
-        if (!t.announced.arriving && remain < 150) { t.announced.arriving = true; this._announceOnTrain(t, 'arriving'); }
         if (remain <= 0.15 || t.v < 0.02) { t.s = stopS; t.v = 0; t.accel = 0; t.state = 'stopped'; t.timer = 0; this.ctx.audio.play('airRelease', { object: tr.group, gain: 0.7, refDistance: 5, maxDistance: 60 }); this._setBlockers(t, true); this.emit('stopped', this._evt(t)); if (tr.setSpeed) tr.setSpeed(0, 0); }
         break;
       }
@@ -145,7 +146,7 @@ class TrainService {
           const peds = t.line.pedsKey && this.ctx.get(t.line.pedsKey); if (peds && peds.setOpen) peds.setOpen(true);
           this._schedule(spec.doorTime + 0.1, () => { if (t.state === 'stopped') this._setBlockers(t, true); });
           this.emit('doorsOpen', this._evt(t));
-          if (!t.announced.stopped) { t.announced.stopped = true; this._schedule(2.5, () => this._announceOnTrain(t, 'stopped')); }
+          if (!t.announced.arriving) { t.announced.arriving = true; this._schedule(0.8, () => this._announceOnTrain(t, 'arriving', { display: 'This is Westminster' })); }
         }
         const closeAt = 1.2 + spec.dwell;
         if (!t.announced.closing && t.timer > closeAt - 4.5) { t.announced.closing = true; this.ctx.audio.play(spec.chime, { object: tr.group, gain: 0.55, refDistance: 6, maxDistance: 50, params: { seconds: 2.6 } }); this._announceOnTrain(t, 'doorsClosing', { display: 'Please stand clear of the doors' }); this.emit('doorsClosing', this._evt(t)); }
@@ -157,7 +158,7 @@ class TrainService {
         if (t.announced.closed && t.timer > closeAt + spec.doorTime + 2.0) {
           // a passenger who is still in a doorway when the doors close stays aboard (attached); proceed
           t.state = 'departing'; t.timer = 0; this._setBlockers(t, false); this.emit('departing', this._evt(t));
-          this._schedule(6, () => this._announceOnTrain(t, 'departing'));
+          this._schedule(3, () => this._announceOnTrain(t, 'departing', { display: `Next station: ${NEXT_STATION[t.line.key] ? NEXT_STATION[t.line.key]() : ''}` }));
         }
         break;
       }
@@ -212,7 +213,7 @@ class TrainService {
     for (const line of Object.values(this.lines)) {
       const ind = this.ctx.get('indicator:' + line.platform); if (!ind || !ind.set) continue;
       const next = this.nextTrains(line.platform);
-      const lines = next.slice(0, 2).map((n, i) => ({ left: `${i + 1}  ${n.destination}${n.line === 'circle' ? ' (Circle)' : ''}`, right: n.state === 'stopped' ? '' : n.minutes === 0 || n.seconds < 30 ? 'Due' : `${n.minutes} min` }));
+      const lines = next.slice(0, 2).map((n, i) => ({ left: `${i + 1} ${n.line === 'circle' && CIRCLE_VIA[n.destination] ? CIRCLE_VIA[n.destination].board : n.destination}`, right: n.state === 'stopped' ? '' : n.minutes === 0 || n.seconds < 30 ? 'Due' : `${n.minutes} min` }));
       const clock = this.ctx.stationTime ? this.ctx.stationTime().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
       lines.push({ left: line.active && line.active.state === 'stopped' ? '*** STAND CLEAR OF THE DOORS ***' : 'Please stand behind the yellow line', right: clock });
       ind.set(lines);
@@ -236,12 +237,22 @@ const NEXT_STATION = {
   districtEB: () => 'Embankment', districtWB: () => "St. James's Park",
 };
 
-// Used only when src/audio/announcements.js is absent.
+// Used only when src/audio/announcements.js is absent. Wording per dossier §10.2–10.5:
+// the Jubilee DVA never names its own line ('This train terminates at X'); the S7 DVA says 'This is a District/Circle line train to X'.
+const NEXT_INTERCHANGE = {
+  jubileeUpper: 'Change for the Bakerloo, Northern and Waterloo & City lines, and National Rail services.',
+  jubileeLower: 'Change for the Piccadilly and Victoria lines.',
+  districtEB: 'Change for the Bakerloo and Northern lines, and National Rail services from Charing Cross. Exit for riverboat services from Embankment Pier.',
+  districtWB: '',
+};
+const s7Dest = t => t.destination.line === 'circle' ? `This is a Circle line train to ${t.destination.name} ${CIRCLE_VIA[t.destination.name] ? CIRCLE_VIA[t.destination.name].spoken : ''}.`.replace(' .', '.') : `This is a District line train to ${t.destination.name}.`;
 const DEFAULT_ANNOUNCEMENTS = {
-  arriving: t => t.line.svc.line === 'jubilee' ? 'This station is Westminster. Change here for the District and Circle lines. Exit for the Houses of Parliament and Westminster Abbey.' : `This is Westminster. Change here for the Jubilee line.`,
-  stopped: t => `This is a ${t.destination.line === 'circle' ? 'Circle' : t.line.svc.line === 'jubilee' ? 'Jubilee' : 'District'} line train to ${t.destination.name}.`,
+  arriving: t => t.line.svc.line === 'jubilee' ? 'This station is Westminster. Change here for the District and Circle lines.' : 'This is Westminster. Change for the Jubilee line. Please mind the gap between the train and the platform.',
+  stopped: () => null,
   doorsClosing: () => 'Please stand clear of the doors.',
-  departing: t => `The next station is ${NEXT_STATION[t.line.key]()}.`,
+  departing: t => t.line.svc.line === 'jubilee'
+    ? `This train terminates at ${t.destination.name}. The next station is ${NEXT_STATION[t.line.key]()}. ${NEXT_INTERCHANGE[t.line.key]}`.trim()
+    : `${s7Dest(t)} The next station is ${NEXT_STATION[t.line.key]()}. ${NEXT_INTERCHANGE[t.line.key]}`.trim(),
 };
 
 function mulberry(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
