@@ -32,18 +32,19 @@ class Population {
     this.agents = []; this.G = null; this.ready = false; this.time = 0; this.tick = 0; this.spawnT = 0; this.secT = 0;
     this.grid = new Map(); this.spots = {}; this.trainsHooked = false; this.riders = new Map(); this.timers = [];
     this.footstepAt = 0; this.murmur = []; this.gateWarned = false; this.stats = { spawned: 0, despawned: 0, boarded: 0, alighted: 0 };
-    this.targets = ctx.quality === 'low' ? { street: 22, enter: 14, photo: 4, wait: { 4: 7, 3: 7, 1: 5, 2: 5 } } : { street: 40, enter: 24, photo: 7, wait: { 4: 13, 3: 12, 1: 9, 2: 9 } };
+    this.targets = ctx.quality === 'low' ? { street: 22, enter: 14, photo: 4, wait: { 4: 7, 3: 7, 1: 5, 2: 5 } } : { street: 46, enter: 30, photo: 8, wait: { 4: 14, 3: 13, 1: 10, 2: 10 } };
     this._registerSynths();
-    this.api = { list: this.agents, spawn: area => this.spawnIn(area), get count() { return 0; }, graph: null, population: this };
+    this.api = { list: this.agents, spawn: area => this.spawnIn(area), get count() { return 0; }, graph: null, population: this, stats: this.stats };
     Object.defineProperty(this.api, 'count', { get: () => this.agents.length });
+    Object.defineProperty(this.api, 'ready', { get: () => this.ready });
   }
 
   // ------------------------------------------------------------------ lazy init
   init() {
-    const { ctx } = this; const collision = ctx.collision;
+    const { ctx } = this; const collision = ctx.collision; const t0 = performance.now();
     const G = buildDefaultGraph();
     try { this.escalators = attachEscalators(G, collision); } catch (e) { console.warn('[npcs] attachEscalators', e); this.escalators = []; }
-    try { mergeExternal(G, ctx); } catch (e) { console.warn('[npcs] mergeExternal', e); }
+    try { const m = mergeExternal(G, ctx); if (m.merged) console.log(`[npcs] merged ${m.merged} external nav graph(s), ${m.ids.length} nodes`); } catch (e) { console.warn('[npcs] mergeExternal', e); }
     const v = validateGraph(G, collision);
     this.G = G; this.api.graph = G;
     const alive = G.nodes.filter(n => n.alive).length;
@@ -53,6 +54,14 @@ class Population {
     for (const p of [1, 2, 3, 4]) this.has['platform' + p] = (this.spots[p] || []).length > 4 && G.withTag('platform' + p).length > 1;
     this._preseed();
     this.ready = true;
+    console.log(`[npcs] ready: ${this.agents.length} passengers seeded in ${(performance.now() - t0).toFixed(0)} ms`);
+  }
+
+  /** A random point from a spawn list another module registered as ctx.register('spawn:<area>', [{x,y,z}]) — or null. */
+  _extSpawn(area) {
+    const list = this.ctx.get('spawn:' + area); if (!Array.isArray(list) || !list.length) return null;
+    const s = list[Math.floor(this.rng() * list.length)]; if (!s || typeof s.x !== 'number') return null;
+    return { x: s.x, y: s.y ?? 0, z: s.z };
   }
 
   _buildWaitSpots() {
@@ -124,7 +133,7 @@ class Population {
   /** Street wanderer: pavement end → end, maybe crossing the road, maybe a Big Ben photo. */
   planStreet(a) {
     const r = this.rng(); const plan = []; const has = t => this.G.withTag(t).length > 0;
-    if (r < 0.3 && has('photo')) plan.push({ kind: 'goto', tags: ['photo'] }, { kind: 'photo', seconds: 14 + this.rng() * 30 });
+    if (r < 0.3 && has('photo')) plan.push({ kind: 'goto', tags: this._photoTags() }, { kind: 'photo', seconds: 14 + this.rng() * 30 });
     else if (r < 0.38 && has('busStop')) plan.push({ kind: 'goto', tags: ['busStop'] }, { kind: 'linger', seconds: 25 + this.rng() * 60, look: new THREE.Vector3(20, 0, 8) });
     const ends = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW'].filter(has);
     plan.push({ kind: 'goto', tags: ends.length ? [ends[Math.floor(this.rng() * ends.length)]] : ['street'], far: true }, { kind: 'despawn' });
@@ -148,7 +157,7 @@ class Population {
       // exit choice: Bridge Street (4) is the main one; tourists favour Exit 3 (Big Ben) and the Embankment (1/2); Whitehall (5/6) for the offices
       const choices = [['exit4', tourist ? 3 : 5], ['exit3', tourist ? 4 : 1.5], ['exit2', tourist ? 2 : 1.2], ['exit1', tourist ? 1.2 : 0.6], ['exit5', 1.2], ['exit6', 0.6]].filter(([t]) => t === 'exit4' ? has('entrance') : has(t));
       let total = 0; for (const c of choices) total += c[1]; let pick = choices.length ? choices[0][0] : null; let rr = this.rng() * total; for (const c of choices) { rr -= c[1]; if (rr <= 0) { pick = c[0]; break; } }
-      if (pick === 'exit3' || pick === 'exit4' || pick === 'exit2') { if (has('photo') && this.rng() < (tourist ? 0.75 : 0.25)) plan.push({ kind: 'goto', tags: [pick === 'exit4' ? 'entrance' : pick], filter: n => n.tags.has('street') }, { kind: 'goto', tags: ['photo'], near: true }, { kind: 'photo', seconds: 15 + this.rng() * 30 }); }
+      if (pick === 'exit3' || pick === 'exit4' || pick === 'exit2') { if (has('photo') && this.rng() < (tourist ? 0.75 : 0.25)) plan.push({ kind: 'goto', tags: [pick === 'exit4' ? 'entrance' : pick], filter: n => n.tags.has('street') }, { kind: 'goto', tags: pick === 'exit2' ? this._photoTags() : ['photo'], near: true }, { kind: 'photo', seconds: 15 + this.rng() * 30 }); }
       else if (pick) plan.push({ kind: 'goto', tags: [pick], filter: n => n.tags.has('street') });
       const ends = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW'].filter(has);
       if (this.rng() < 0.12 && has('busStop')) plan.push({ kind: 'goto', tags: ['busStop'] }, { kind: 'linger', seconds: 20 + this.rng() * 50, look: new THREE.Vector3(20, 0, 8) });
@@ -190,6 +199,8 @@ class Population {
     }
   }
   _dist(a, id) { const n = this.G.nodes[id]; return Math.hypot(n.x - a.pos.x, n.z - a.pos.z) + Math.abs(n.y - a.pos.y) * 3; }
+  /** Photo spot tags: tourists gather on the river wall by Exit 1 / Boadicea (the full tower above the bridge corner) as much as at the foot of the tower. */
+  _photoTags() { return this.G.withTag('photoExit1').length && this.rng() < 0.45 ? ['photoExit1'] : ['photo']; }
 
   /** Per-agent state progression (after movement). */
   _step(a, dt) {
@@ -250,13 +261,15 @@ class Population {
   _spawnStreet(preseed = false) {
     const starts = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW'].map(t => this.G.withTag(t)).flat(); if (!starts.length) return null;
     const id = starts[Math.floor(this.rng() * starts.length)]; const n = this.G.nodes[id];
-    const a = this._make(n.x + (this.rng() - 0.5) * 2, n.y, n.z + (this.rng() - 0.5) * 1.5, { tourist: 0.45, child: 0.05 }); if (!a) return null;
+    const ext = this.rng() < 0.35 ? this._extSpawn('street') : null;
+    const a = ext ? this._make(ext.x, ext.y, ext.z, { tourist: 0.45, child: 0.05 }) : this._make(n.x + (this.rng() - 0.5) * 2, n.y, n.z + (this.rng() - 0.5) * 1.5, { tourist: 0.45, child: 0.05 }); if (!a) return null;
     this.planStreet(a); if (preseed) this._skipAhead(a); return a;
   }
   _spawnEnterer(preseed = false) {
-    const ext = this.ctx.get('spawn:street'); let x, y, z;
+    let x, y, z;
     const starts = ['streetEndW', 'streetEndE', 'streetEndN', 'streetEndNW', 'exit3', 'exit2'].map(t => this.G.withTag(t)).flat().filter(id => this.G.nodes[id].tags.has('street'));
-    if (Array.isArray(ext) && ext.length && this.rng() < 0.5) { const s = ext[Math.floor(this.rng() * ext.length)]; x = s.x; y = s.y ?? 0; z = s.z; }
+    const ext = this.rng() < 0.5 ? (this._extSpawn('street') || (this.rng() < 0.3 ? this._extSpawn('ticketHall') : null)) : null;   // other modules' spawn points (street doors, the lifts)
+    if (ext) { x = ext.x; y = ext.y; z = ext.z; }
     else if (starts.length) { const n = this.G.nodes[starts[Math.floor(this.rng() * starts.length)]]; x = n.x + (this.rng() - 0.5) * 2; y = n.y; z = n.z; }
     else { const h = this.G.withTag('hall'); if (!h.length) return null; const n = this.G.nodes[h[Math.floor(this.rng() * h.length)]]; x = n.x; y = n.y; z = n.z; }
     const a = this._make(x, y, z, { tourist: 0.35, child: 0.04 }); if (!a) return null;
@@ -268,7 +281,7 @@ class Population {
     spot.agent = a; a.waitSpot = spot; a.platform = platform; a.role = 'enter'; a.plan = [{ kind: 'wait', platform }]; a.stepIdx = 0; a.step = a.plan[0]; a.state = 'idle'; a.heading = Math.atan2(spot.face.x - spot.x, spot.face.z - spot.z); a.headingTarget = a.heading; return a;
   }
   _spawnPhoto() {
-    const ids = this.G.withTag('photo'); if (!ids.length) return null; const n = this.G.nodes[ids[Math.floor(this.rng() * ids.length)]];
+    const ids = this.G.withTag(this._photoTags()[0]); if (!ids.length) return null; const n = this.G.nodes[ids[Math.floor(this.rng() * ids.length)]];
     const a = this._make(n.x + (this.rng() - 0.5) * 1.5, n.y, n.z + (this.rng() - 0.5) * 1, { tourist: 0.9 }); if (!a) return null;
     a.role = 'street'; a.plan = [{ kind: 'photo', seconds: 10 + this.rng() * 30 }, { kind: 'goto', tags: ['streetEndW', 'streetEndE', 'streetEndN'].filter(t => this.G.withTag(t).length), far: true }, { kind: 'despawn' }]; a.stepIdx = -1; this._advance(a); return a;
   }
@@ -453,7 +466,18 @@ class Population {
     }
     this._updateRiders(); for (const [, list] of this.riders) for (const a of list) if (!a.dead) a.render();
     this.pool.flush();
-    this.secT += dt; if (this.secT > 1) { this.secT = 0; this._updateMurmur(); if (!this.trainsHooked) this._hookTrains(); }
+    this.secT += dt; if (this.secT > 1) { this.secT = 0; this._updateMurmur(); if (!this.trainsHooked) this._hookTrains(); this._lateMerge(); }
+  }
+
+  /** Every few seconds fold in nav graphs registered after we started (dev modules, late builders); only the new nodes are validated. */
+  _lateMerge() {
+    this.mergeT = (this.mergeT || 0) + 1; if (this.mergeT < 5 || !this.G) return; this.mergeT = 0;
+    try {
+      const m = mergeExternal(this.G, this.ctx); if (!m.merged) return;
+      const v = validateGraph(this.G, this.ctx.collision, { only: new Set(m.ids) });
+      console.log(`[npcs] late-merged ${m.merged} nav graph(s): ${m.ids.length} nodes, ${v.killed} without floor, ${v.dropped} edges dropped`);
+      this._buildWaitSpots();
+    } catch (e) { console.warn('[npcs] late merge', e); }
   }
 }
 

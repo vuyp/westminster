@@ -336,8 +336,14 @@ export class AudioEngine {
             hg.gain.setTargetAtTime(s * s * 0.25, t, 0.1); bp.frequency.setTargetAtTime(1500 + s * 2500, t, 0.1);
             // traction inverter: pitch tracks speed (1996 TS GTO 'whine'), audible mainly under power/braking
             const active = Math.abs(accel) > 0.15 ? 1 : 0.25;
-            inv.frequency.setTargetAtTime(stock === 'S7' ? 300 + s * 1400 : 120 + s * 900, t, 0.1); ig.gain.setTargetAtTime(active * Math.min(0.12, s * 0.35 + 0.02) * (v > 0.3 ? 1 : 0), t, 0.15);
-            inv2.frequency.setTargetAtTime(stock === 'S7' ? 900 + s * 2400 : 350 + s * 1800, t, 0.1); ig2.gain.setTargetAtTime(active * Math.min(0.05, s * 0.12) * (v > 0.3 ? 1 : 0), t, 0.15);
+            // S7 (IGBT): smooth glissando 200 Hz → 1.2 kHz. 1996 TS (GTO): the 'gear-changing' whine — the pitch spools up and
+            // drops back in 4 discrete pulse-mode steps between 0 and 40 km/h (11 m/s), then tracks motor frequency (dossier §8.1)
+            let f1, f2;
+            if (stock === 'S7') { f1 = 200 + s * 1000; f2 = 600 + s * 2400; }
+            else if (v < 11) { const step = 11 / 4; const k = Math.floor(v / step); const frac = (v - k * step) / step; f1 = 180 + k * 40 + frac * 420; f2 = f1 * 2.02; }
+            else { f1 = 620 + (v - 11) * 45; f2 = f1 * 1.5; }
+            inv.frequency.setTargetAtTime(f1, t, stock === 'S7' ? 0.12 : 0.03); ig.gain.setTargetAtTime(active * Math.min(0.14, s * 0.4 + 0.02) * (v > 0.3 ? 1 : 0), t, 0.15);
+            inv2.frequency.setTargetAtTime(f2, t, stock === 'S7' ? 0.12 : 0.03); ig2.gain.setTargetAtTime(active * Math.min(0.06, s * 0.14) * (v > 0.3 ? 1 : 0), t, 0.15);
           } else if (k === 'accel') accel = v;
         },
       };

@@ -153,8 +153,8 @@ export class Player {
     this.grounded = true; this.floor = { sound: 'train' };
   }
 
-  /** Sit on a seat: object with world position & facing yaw. */
-  sit(seat) { this.seated = seat; this.hud && this.hud.prompt(null); }
+  /** Sit on a seat: { position (world), yaw?, eyeHeight? (default 1.15 m above position), train? }. */
+  sit(seat) { this.seated = seat; if (seat && seat.yaw != null) { this.yaw = seat.yaw; if (this.train) { const q = this.train.group.getWorldQuaternion(new THREE.Quaternion()); const e = new THREE.Euler().setFromQuaternion(q, 'YXZ'); this.localYaw = this.yaw - e.y; } } this.hud && this.hud.prompt(null); }
   standUp() { this.seated = null; }
 
   _footstep(run, surfaceOverride = null) {
@@ -182,7 +182,7 @@ export class Player {
     const c = this.camera;
     let eye = EYE * (this.crouch ? 0.6 : 1);
     if (this.seated) {
-      c.position.copy(this.seated.position); c.position.y += 1.15;
+      c.position.copy(this.seated.position); c.position.y += (this.seated.eyeHeight ?? 1.15);
       c.rotation.set(0, 0, 0, 'YXZ'); c.rotation.y = this.yaw; c.rotation.x = this.pitch; return;
     }
     const bobY = Math.sin(this.bob * 2) * 0.028 * (this.bob > 0 ? 1 : 0), bobX = Math.cos(this.bob) * 0.012 * (this.bob > 0 ? 1 : 0);

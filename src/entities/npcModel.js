@@ -25,6 +25,11 @@ export const DIM = {
 };
 const REF_HEIGHT = 1.75;
 
+/** Thigh swing amplitude (rad) for a gait amount g in 0..1 — shared by pose() and the locomotion so feet never slide. */
+export function swingAmplitude(g) { return (0.30 + 0.16 * g) * g; }
+/** Metres covered by one full walk cycle (two steps) at gait g for a person of `height`: the geometric stride of the pose. */
+export function cycleLength(g, height = REF_HEIGHT) { return Math.max(0.9, 4 * (DIM.thigh + DIM.shin) * Math.sin(swingAmplitude(Math.max(0.35, g))) * (height / REF_HEIGHT) * 0.96); }
+
 // ---- palettes (London, a cool weekday) ----
 export const SKIN = [0xf1c8a8, 0xe8b894, 0xd9a07c, 0xc07f5a, 0x9a5f3d, 0x6e4128, 0x4a2b1c, 0xf5d5bb];
 export const HAIR = [0x1c1612, 0x2b1d14, 0x3a2a1c, 0x5b3d22, 0x8a6a3c, 0xb99560, 0x8c8c8c, 0xc9c3b8, 0x7a2f14, 0x0d0b0a];
@@ -77,8 +82,9 @@ function buildGeometries() {
   const hairCap = (r, thetaLen, back = true) => { const top = new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, thetaLen); const parts = [top]; if (back) parts.push(new THREE.SphereGeometry(r, 12, 6, Math.PI * 0.95, Math.PI * 1.1, thetaLen - 0.05, Math.PI * 0.32)); const g = merge(parts); g.scale(1, 1.16, 1.02); g.translate(0, D.headCentreY, 0.005); return g; };
   G.hairShort = hairCap(D.headR + 0.006, Math.PI * 0.45);
   G.hairBuzz = hairCap(D.headR + 0.003, Math.PI * 0.42);
-  { const g = hairCap(D.headR + 0.008, Math.PI * 0.5); const fall = new THREE.CylinderGeometry(D.headR + 0.006, D.headR * 0.86, 0.24, 10, 1, true, Math.PI * 0.6, Math.PI * 0.8); fall.scale(1, 1, 1.02); fall.translate(0, D.headCentreY - 0.10, 0.0); G.hairLong = merge([g, fall]); }
-  { const g = hairCap(D.headR + 0.008, Math.PI * 0.45); const fall = new THREE.CylinderGeometry(D.headR * 1.0, D.headR * 1.05, 0.14, 10, 1, true, Math.PI * 0.5, Math.PI); fall.translate(0, D.headCentreY + 0.0, -0.005); G.hairBob = merge([g, fall]); }
+  // long hair: the cap plus a fall down the back and behind the ears (tucked back so it does not read as a flap over the face)
+  { const g = hairCap(D.headR + 0.008, Math.PI * 0.5); const fall = new THREE.CylinderGeometry(D.headR + 0.006, D.headR * 0.86, 0.24, 10, 1, true, Math.PI * 0.68, Math.PI * 0.64); fall.scale(1, 1, 1.02); fall.translate(0, D.headCentreY - 0.10, -0.006); G.hairLong = merge([g, fall]); }
+  { const g = hairCap(D.headR + 0.008, Math.PI * 0.45); const fall = new THREE.CylinderGeometry(D.headR * 1.0, D.headR * 1.05, 0.14, 10, 1, true, Math.PI * 0.56, Math.PI * 0.88); fall.translate(0, D.headCentreY + 0.0, -0.008); G.hairBob = merge([g, fall]); }
   { const g = hairCap(D.headR + 0.006, Math.PI * 0.45); const bun = sphere(0.04, 7, 5); bun.translate(0, D.headCentreY + 0.07, -0.09); G.hairBun = merge([g, bun]); }
   { const g = new THREE.SphereGeometry(D.headR + 0.014, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5); g.scale(1, 1.2, 1.02); g.translate(0, D.headCentreY + 0.01, 0.005); const band = new THREE.CylinderGeometry(D.headR + 0.018, D.headR + 0.016, 0.05, 12, 1, true); band.translate(0, D.headCentreY + 0.005, 0.005); G.beanie = merge([g, band]); }
   { const g = new THREE.SphereGeometry(D.headR + 0.010, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.42); g.scale(1, 1.16, 1.02); g.translate(0, D.headCentreY + 0.012, 0.005); const peak = new THREE.BoxGeometry(0.12, 0.008, 0.08); peak.translate(0, D.headCentreY + 0.035, D.headR + 0.045); G.cap = merge([g, peak]); }
@@ -187,15 +193,16 @@ export function createNpcPool(ctx, { max = 200 } = {}) {
   mk('vest', G.vest, vestMat, 1, false); mk('backpack', G.backpack, bagMat); mk('suitcase', G.suitcase, caseMat); mk('bag', G.bag, bagMat); mk('phone', G.phone, phoneMat, 1, false);
   const HAIR_PART = { short: 'hairShort', buzz: 'hairBuzz', long: 'hairLong', bob: 'hairBob', bun: 'hairBun', beanie: 'beanie', cap: 'cap', bald: null };
 
-  const free = []; for (let i = max - 1; i >= 0; i--) free.push(i);
+  const free = []; for (let i = max - 1; i >= 0; i--) free.push(i);   // pop() hands out low slots first, so the crowd stays packed at the start of the buffers
   const slots = new Array(max).fill(null);
+  let hi = 0;                                                            // allocation high-water mark: instances beyond it are never drawn
   const dirty = new Set();
   const col = new THREE.Color();
   const setColor = (name, idx, hex) => { const p = parts[name]; col.set(hex); p.mesh.setColorAt(idx, col); p.mesh.instanceColor.needsUpdate = true; };
   const hide = (name, idx) => { parts[name].mesh.setMatrixAt(idx, ZERO); dirty.add(name); };
 
   function alloc(app) {
-    if (!free.length) return -1; const i = free.pop(); slots[i] = app;
+    if (!free.length) return -1; const i = free.pop(); slots[i] = app; if (i + 1 > hi) hi = i + 1;
     // colours
     setColor('head', i, app.skin); setColor('hand', i * 2, app.skin); setColor('hand', i * 2 + 1, app.skin);
     setColor('torso', i, app.coat); setColor('hood', i, app.coat);
@@ -212,6 +219,9 @@ export function createNpcPool(ctx, { max = 200 } = {}) {
   function freeSlot(i) {
     if (i < 0 || !slots[i]) return; slots[i] = null; free.push(i);
     for (const name in parts) { const p = parts[name]; for (let s = 0; s < p.per; s++) p.mesh.setMatrixAt(i * p.per + s, ZERO); dirty.add(name); }
+    while (hi > 0 && !slots[hi - 1]) hi--;
+    // keep the free list handing out the lowest slots first so the live instances stay packed
+    if (free.length > 1 && free[free.length - 1] !== Math.min(free[free.length - 1], free[free.length - 2])) free.sort((a, b) => b - a);
   }
 
   // ---- pose computation --------------------------------------------------
@@ -232,7 +242,7 @@ export function createNpcPool(ctx, { max = 200 } = {}) {
     const app = slots[i]; if (!app) return;
     const s = app.height / REF_HEIGHT; const w = app.build;
     const D = DIM; const phase = p.phase || 0; const g = Math.min(1, Math.max(0, p.stride ?? 0));
-    const A = (0.30 + 0.16 * g) * g;                               // thigh swing amplitude (rad)
+    const A = swingAmplitude(g);                                   // thigh swing amplitude (rad)
     const sinP = Math.sin(phase), cosP = Math.cos(phase);
     const legLen = D.thigh + D.shin;
     const idle = p.idle || 0;
@@ -293,7 +303,10 @@ export function createNpcPool(ctx, { max = 200 } = {}) {
     }
   }
 
-  function flush() { for (const name of dirty) { parts[name].mesh.instanceMatrix.needsUpdate = true; } dirty.clear(); }
+  function flush() {
+    for (const name of dirty) { parts[name].mesh.instanceMatrix.needsUpdate = true; } dirty.clear();
+    for (const name in parts) { const p = parts[name]; const n = Math.min(max * p.per, hi * p.per); if (p.mesh.count !== n) p.mesh.count = n; }
+  }
   function hideSlot(i) { for (const name in parts) { const p = parts[name]; for (let s = 0; s < p.per; s++) p.mesh.setMatrixAt(i * p.per + s, ZERO); dirty.add(name); } }
 
   scene.add(group);

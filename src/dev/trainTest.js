@@ -11,6 +11,9 @@ import { createTrain } from '../entities/trains.js';
 export function build(ctx) {
   const { M, scene, collision, floorPlane } = ctx;
   const out = { trains: {} };
+  // ?trains=s7,1996,mover → build only those (for per-train draw-call accounting); default all three
+  const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+  const want = new Set((ctx.__trainTestOnly || (params && params.get('trains')) || 's7,1996,mover,curve').split(','));
   const railMat = M.paint(0x6a6560, { roughness: 0.6, metalness: 0.6 });
 
   // ---- District & Circle (rotated frame): Platform 2 (eastbound, NW side) + Platform 1 slab + the eastbound track
@@ -22,9 +25,12 @@ export function build(ctx) {
   }
   const tb = floorPlane(6, DISTRICT.platformLength + 40, M.precast(), { x: dcToWorld(0, 0).x, y: LEVELS.dcRail - 0.2, z: dcToWorld(0, 0).z }); tb.rotation.y = DISTRICT.frame.yaw; scene.add(tb);
   scene.add(buildTrackMesh(eb, { sMin: eb.stopS - 80, sMax: eb.stopS + 80, railMaterial: railMat, sleeperMaterial: M.precast() }));
-  const s7 = createTrain(ctx, { stock: 'S7', track: eb, direction: 'eastbound', destination: 'Upminster', line: 'district' });
-  s7.placeAlong(eb, eb.stopS); scene.add(s7.group); s7.setDoors(true, { side: 'left', silent: true, immediate: true }); s7.setDisplay('This is Westminster. Change for the Jubilee line.');
-  ctx.register('train:district-eb', s7); out.trains.s7 = s7;
+  let s7 = null, t96 = null;
+  if (want.has('s7')) {
+    s7 = createTrain(ctx, { stock: 'S7', track: eb, direction: 'eastbound', destination: 'Upminster', line: 'district' });
+    s7.placeAlong(eb, eb.stopS); scene.add(s7.group); s7.setDoors(true, { side: 'left', silent: true, immediate: true }); s7.setDisplay('This is Westminster. Change for the Jubilee line.');
+    ctx.register('train:district-eb', s7); out.trains.s7 = s7;
+  }
 
   // ---- Jubilee Platform 3 (eastbound, upper): platform slab NORTH of the track + the track
   const ju = new Track(TRACKS.jubileeUpper);
@@ -33,20 +39,36 @@ export function build(ctx) {
   collision.addFloor({ xMin: JUBILEE.xMin, xMax: JUBILEE.xMax, zMin: JUBILEE.platformZMin, zMax: JUBILEE.pedZ, y: LEVELS.jubUpper });
   scene.add(floorPlane(JUBILEE.xMax - JUBILEE.xMin + 40, 4.5, M.precast(), { x: 0, y: LEVELS.jubUpper + LEVELS.jubRailOffset - 0.2, z: JUBILEE.trackZ }));
   scene.add(buildTrackMesh(ju, { sMin: ju.stopS - 80, sMax: ju.stopS + 80, railMaterial: railMat, sleeperMaterial: M.precast() }));
-  const t96 = createTrain(ctx, { stock: '1996', track: ju, direction: 'eastbound', destination: 'Stratford', line: 'jubilee' });
-  t96.placeAlong(ju, ju.stopS); scene.add(t96.group); t96.setDoors(true, { side: 'left', silent: true, immediate: true }); t96.setDisplay('This station is Westminster. Change here for the District and Circle lines.');
-  ctx.register('train:jubilee-upper', t96); out.trains.t96 = t96;
+  if (want.has('1996')) {
+    t96 = createTrain(ctx, { stock: '1996', track: ju, direction: 'eastbound', destination: 'Stratford', line: 'jubilee' });
+    t96.placeAlong(ju, ju.stopS); scene.add(t96.group); t96.setDoors(true, { side: 'left', silent: true, immediate: true }); t96.setDisplay('This station is Westminster. Change here for the District and Circle lines.');
+    ctx.register('train:jubilee-upper', t96); out.trains.t96 = t96;
+  }
 
   // ---- a moving 1996 TS on Platform 4's track (lower) to check wheel / sway animation
   const jl = new Track(TRACKS.jubileeLower);
   scene.add(floorPlane(JUBILEE.xMax - JUBILEE.xMin, pw, M.granite(), { x: 0, y: LEVELS.jubLower, z: (JUBILEE.pedZ + JUBILEE.platformZMin) / 2 }));
-  const mover = createTrain(ctx, { stock: '1996', track: jl, direction: 'westbound', destination: 'Stanmore', line: 'jubilee' });
-  let s = jl.stopS - 60; mover.placeAlong(jl, s); scene.add(mover.group); out.trains.mover = mover;
-  ctx.onUpdate(dt => { s += 8 * dt; if (s > jl.stopS + 60) s = jl.stopS - 60; mover.placeAlong(jl, s); mover.setSpeed(8, 0); mover.update(dt); });
-  ctx.onUpdate(dt => { s7.update(dt); t96.update(dt); });
+  if (want.has('mover')) {
+    const mover = createTrain(ctx, { stock: '1996', track: jl, direction: 'westbound', destination: 'Stanmore', line: 'jubilee' });
+    let s = jl.stopS - 60; mover.placeAlong(jl, s); scene.add(mover.group); out.trains.mover = mover;
+    ctx.onUpdate(dt => { s += 8 * dt; if (s > jl.stopS + 60) s = jl.stopS - 60; mover.placeAlong(jl, s); mover.setSpeed(8, 0); mover.update(dt); });
+  }
+  // ---- an S7 standing in the curve beyond the north-east end of the D&C platforms, to check that the cars follow the track
+  if (want.has('curve')) {
+    const bend = createTrain(ctx, { stock: 'S7', track: eb, direction: 'eastbound', destination: 'Tower Hill', line: 'circle' });
+    bend.placeAlong(eb, eb.stopS + 150); scene.add(bend.group); bend.setSpeed(6, 0.4); out.trains.bend = bend;
+    scene.add(buildTrackMesh(eb, { sMin: eb.stopS + 80, sMax: eb.stopS + 230, railMaterial: railMat, sleeperMaterial: M.precast() }));
+    ctx.onUpdate(dt => bend.update(dt));
+  }
+  ctx.onUpdate(dt => { if (s7) s7.update(dt); if (t96) t96.update(dt); });
+  // draw-call accounting: meshes per car and instanced meshes per train
+  for (const [name, tr] of Object.entries(out.trains)) {
+    const perCar = tr.cars.map(c => c.body.children.filter(o => o.isMesh).map(o => o.name)); const inst = tr.group.children.filter(o => o.isInstancedMesh).map(o => o.name + (Array.isArray(o.material) ? '×' + o.material.length : ''));
+    console.warn(`[trainTest] ${name}: cars ${perCar.map(l => l.length).join('+')} = ${perCar.reduce((a, l) => a + l.length, 0)} meshes; instanced ${inst.length}: ${inst.join(', ')}; DM keys: ${perCar[0].join(',')}; M keys: ${perCar[1].join(',')}`);
+  }
 
   // register the stopped trains' exterior boxes so --showBlockers shows the doorway gaps
-  for (const b of s7.exteriorBoxes()) collision.addBlocker(b, 'train'); for (const b of t96.exteriorBoxes()) collision.addBlocker(b, 'train');
+  for (const tr of [s7, t96]) if (tr) for (const b of tr.exteriorBoxes()) collision.addBlocker(b, 'train');
 
   const dark = typeof location !== 'undefined' && new URLSearchParams(location.search).get('lights') === '0';
   if (!dark) { scene.add(new THREE.HemisphereLight(0xe8eefc, 0x3a3a3a, 1.35)); const d = new THREE.DirectionalLight(0xffffff, 0.8); d.position.set(30, 40, -20); scene.add(d); }

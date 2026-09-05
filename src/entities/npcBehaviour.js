@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { Collision } from '../core/collision.js';
+import { cycleLength } from './npcModel.js';
 
 // ============================================================================ NavGraph
 export class NavGraph {
@@ -90,29 +91,31 @@ export function attachEscalators(G, collision, { linkDist = 7 } = {}) {
 
 /** Fold external graphs (ctx.register('nav:<area>', {nodes:[{id,x,y,z}], edges:[[a,b] | [a,b,{oneWay,kind}]]})) into G. */
 export function mergeExternal(G, ctx) {
-  const reg = ctx._registry; if (!reg) return 0; let merged = 0;
+  const reg = ctx._registry; if (!reg) return { merged: 0, ids: [] }; let merged = 0; const ids = [];
   for (const [key, val] of reg) {
     if (!key.startsWith('nav:') || !val || !Array.isArray(val.nodes)) continue; if (val._npcMerged) continue; val._npcMerged = true;
     const area = key.slice(4); const map = new Map();
-    for (const n of val.nodes) { if (n == null || typeof n.x !== 'number') continue; const tags = ['ext', area]; if (Array.isArray(n.tags)) tags.push(...n.tags); if (typeof n.tag === 'string') tags.push(n.tag); const id = G.add(n.x, n.y, n.z, tags, area); map.set(n.id ?? map.size, id); }
+    for (const n of val.nodes) { if (n == null || typeof n.x !== 'number') continue; const tags = ['ext', area]; if (Array.isArray(n.tags)) tags.push(...n.tags); if (typeof n.tag === 'string') tags.push(n.tag); const id = G.add(n.x, n.y, n.z, tags, area); map.set(n.id ?? map.size, id); ids.push(id); }
     for (const e of (val.edges || [])) { if (!Array.isArray(e)) continue; const a = map.get(e[0]), b = map.get(e[1]); if (a == null || b == null) continue; const o = e[2] || {}; G.link(a, b, { oneWay: !!o.oneWay, kind: o.kind || 'walk', cost: o.cost ?? null }); }
-    // stitch: each external node to default nodes within 3 m on the same level
+    // stitch: each external node to default nodes within 3.5 m on the same level
     for (const id of map.values()) { const n = G.nodes[id]; for (const m of G.nodes) { if (m.tags.has('ext') || !m.alive) continue; if (Math.abs(m.y - n.y) > 0.8) continue; const d = Math.hypot(m.x - n.x, m.z - n.z); if (d < 3.5) G.link(id, m.id); } }
     merged++;
   }
-  return merged;
+  return { merged, ids };
 }
 
 /** Drop edges with no walkable floor under them or which run through blockers; kill nodes with no floor. */
-export function validateGraph(G, collision, { keepKinds = ['esc', 'escReverse'] } = {}) {
+export function validateGraph(G, collision, { keepKinds = ['esc', 'escReverse'], only = null } = {}) {
   const floorOk = (x, z, y) => !!collision.floorAt(x, z, y + 0.9, { stepUp: 0.5, drop: 2.6 });
   const inBlocker = (x, z, y) => { const c = collision._cell(x, z); if (!c) return false; for (const b of c.blockers) if (x >= b.min.x && x <= b.max.x && z >= b.min.z && z <= b.max.z && y + 1.2 > b.min.y && y + 1.2 < b.max.y && y + 0.6 < b.max.y) return true; return false; };
   let dropped = 0, killed = 0;
-  for (const n of G.nodes) { if (!n.alive) continue; if (!floorOk(n.x, n.z, n.y)) { n.alive = false; killed++; } }
+  const consider = id => !only || only.has(id);
+  for (const n of G.nodes) { if (!n.alive || !consider(n.id)) continue; if (!floorOk(n.x, n.z, n.y)) { n.alive = false; killed++; } }
   for (let a = 0; a < G.nodes.length; a++) {
     const na = G.nodes[a]; if (!na.alive) { G.adj[a] = []; continue; }
     G.adj[a] = G.adj[a].filter(e => {
       const nb = G.nodes[e.to]; if (!nb.alive) return false; if (keepKinds.includes(e.kind)) return true;
+      if (!consider(a) && !consider(e.to)) return true;
       const steps = Math.max(2, Math.ceil(e.len / 0.7));
       for (let i = 1; i < steps; i++) {
         const t = i / steps; const x = na.x + (nb.x - na.x) * t, z = na.z + (nb.z - na.z) * t, y = na.y + (nb.y - na.y) * t;
@@ -232,7 +235,8 @@ export class Agent {
     this.onEsc = !!(this.floor && this.floor.move);
     // ---- gait
     const sx = this.vel.x, sz = this.vel.z; this.selfSpeed = Math.hypot(sx, sz);
-    const strideLen = (0.62 + 0.3 * Math.min(1, this.selfSpeed / 1.5)) * (app.height / 1.75) * 2;
+    // phase advances so that the geometric stride of the pose covers exactly the ground travelled (planted feet do not slide)
+    const strideLen = cycleLength(this.stride, app.height);
     if (this.selfSpeed > 0.08) { this.phase += (2 * Math.PI * this.selfSpeed / strideLen) * dt; }
     else { const target = Math.round(this.phase / Math.PI) * Math.PI; this.phase += (target - this.phase) * Math.min(1, dt * 6); }
     const gTarget = Math.min(1, this.selfSpeed / 1.25); this.stride += (gTarget - this.stride) * Math.min(1, dt * 8);

@@ -15,16 +15,20 @@
 // built in "geometry space" (cab at -z for a driving car); the rear DM is the same geometry turned
 // through 180° in its `body` group. Dimensions, liveries and fittings follow docs/WESTMINSTER_REFERENCE.md §8.
 //
-// Draw-call budget: one merged mesh per material per car (~17 for a trailer, ~21 for a DM) plus a
-// handful of InstancedMeshes per train (wheels, door leaves, LED displays, line diagrams, posters)
-// → about 140–160 draw calls for a 7-car train. Lights: none — the saloon is lit by emissive panels.
+// Draw-call budget: one merged mesh per material per car (~17 for a trailer, ~23 for a DM; same-coloured
+// parts share a mesh through trainParts.materialAliases) plus a handful of InstancedMeshes per train
+// (wheels, door leaves, LED displays, line diagrams, Tube maps, posters) → c. 160 draw calls and
+// c. 130–150 k triangles for a 7-car train. Lights: none — the saloon is lit by emissive panels.
+// Doors: both stocks hang their leaves OUTSIDE the bodyside (dossier §8.1); the leaves slide apart along
+// the skin over the adjacent windows, with a hanger-rail moulding above each doorway.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { STOCK_1996, STOCK_S7, trainLength, carOffsets } from './trainSpec.js';
-import { xAt, topOf, profileStrip, profileCap, boxAt, cylAt, planeAt, Collector, decalAtlas, trainMaterials, decalMaterial, wheelGeometry, leafGeometry } from './trainParts.js';
-import { carLayout, buildInterior, collisionModel, spansOutsideDoors, pillarSpans, paneSpans, surfaceMatrix, leanAt, remapUV } from './trainInterior.js';
+import { xAt, topOf, profileStrip, profileCap, boxAt, cylAt, planeAt, Collector, decalAtlas, trainMaterials, materialAliases, decalMaterial, wheelGeometry, leafGeometry, ledMatrixText, tubeMapTexture, mergeGeometries } from './trainParts.js';
+import { carLayout, buildInterior, collisionModel, spansOutsideDoors, pillarSpans, paneSpans, surfaceMatrix, leanAt, remapUV, LED_ASPECT } from './trainInterior.js';
 
 const GAUGE = 1.435;
+const SEAT_EYE_BASE = 0.08;   // the Player puts its eye 1.15 m above seat.position → eye c. 1.23 m above the saloon floor when sat
 const assemblyCache = new Map();
 let unitCounter = 0;
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4();
@@ -71,7 +75,11 @@ function buildExterior(spec, lay, col, atlas) {
       for (const edge of [d.zMin, d.zMax]) col.add('dark', profileStrip(P, sill, doorTop, edge - 0.012, edge + 0.012, { side, inset: 0.002 }));
       col.add('dark', profileStrip(P, doorTop, doorTop + 0.025, d.zMin - 0.012, d.zMax + 0.012, { side, inset: 0.002 }));
       col.add('steel', profileStrip(P, sill - 0.03, sill + 0.005, d.zMin - 0.012, d.zMax + 0.012, { side, inset: -0.004 }));
-      if (isS7) col.add('indicator', boxAt(0.05, 0.05, 0.16, side * (xAt(P, doorTop + 0.09) + 0.01), doorTop + 0.09, d.z));
+      // door hanger rail cover: the leaves are externally hung, so a slim moulding runs above the doorway over the full leaf travel
+      const travel = d.leaves === 2 ? d.width / 2 : d.width;
+      col.add('dark', profileStrip(P, doorTop + 0.03, doorTop + 0.085, d.zMin - travel - 0.06, d.zMax + travel + 0.06, { side, inset: isS7 ? -0.03 : -0.045, steps: 1 }));
+      col.add('dark', profileStrip(P, doorTop + 0.025, doorTop + 0.03, d.zMin - travel - 0.06, d.zMax + travel + 0.06, { side, inset: isS7 ? -0.002 : -0.002, steps: 1 }));
+      if (isS7) col.add('indicator', boxAt(0.05, 0.05, 0.16, side * (xAt(P, doorTop + 0.13) + 0.01), doorTop + 0.13, d.z));
     }
     // band E: cant rail (body) then the roof, with a rain strip moulding
     col.add('body', profileStrip(P, doorTop, cantRail, b0, b1, { side, steps: 2 }));
@@ -93,9 +101,11 @@ function buildExterior(spec, lay, col, atlas) {
       col.add('body', profileStrip(P, sill, doorTop, b0, dz0 - 0.012, { side })); col.add('body', profileStrip(P, sill, doorTop, dz1 + 0.012, wz0 - 0.12, { side })); col.add('body', profileStrip(P, sill, doorTop, wz1 + 0.12, cabZ, { side }));
       col.add('body', profileStrip(P, wb, wt, wz1 + 0.12, cabZ, { side }));
     }
-    // decals: 440 mm roundel + line name near one end, blue 80 mm car numbers near both ends (centred between the window bottom and the band)
+    // decals: 440 mm roundel + line name near one end, blue 80 mm car numbers near both ends (centred between the window bottom and the band),
+    // and the 130 × 150 mm safety-blue wheelchair symbol beside the doorways of the S7's MS car (the one with the wheelchair bays)
     if (atlas) {
       const yB = (sill + wb) / 2 + 0.02; const zr = isDM ? cabZ + 0.55 : b0 + 0.75;
+      if (lay.wheelchairCar) for (const d of doorways) col.add('decal', decalOn(atlas.rect('wheelchair'), 0.13, 0.15, exteriorMatrix(P, sill + 1.25, d.zMax + 0.16, side)));
       col.add('decal', decalOn(atlas.rect('roundel'), 0.44, 0.44, exteriorMatrix(P, yB, zr, side)));
       col.add('decal', decalOn(atlas.rect('lineName'), 0.56, 0.28, exteriorMatrix(P, yB, zr + 0.56, side)));
       for (const zn of [b1 - 0.6, isDM ? b0 + 1.02 + 0.45 : b0 + 0.75 + 1.15]) col.add('decal', decalOn(atlas.rect('unitNo'), 0.26, 0.26, exteriorMatrix(P, sill + 0.30, zn, side)));
@@ -162,14 +172,15 @@ function buildCabFront(spec, lay, col, atlas) {
   col.add('valance', planeAt(2 * xAt(P, 0.6) - 0.04, isS7 ? 0.5 : 0.46, 0, isS7 ? 0.72 : bb + 0.23, z - 0.006, { ry: Math.PI }));
   // windscreens (two-piece) with black surrounds; S7 has a full-width black mask
   if (isS7) col.add('windowFrame', planeAt(2.62, y1 - y0 + 0.18, 0, (y0 + y1) / 2, z - 0.006, { ry: Math.PI }));
-  const win = isS7 ? [[-1.2, -0.36], [0.36, 1.2]] : [[-1.06, -0.36], [0.36, 1.06]];
+  const win = isS7 ? [[-1.24, -0.82], [-0.02, 1.22]] : [[-1.06, -0.36], [0.36, 1.06]];   // S7: narrow pane over the door, wide driver's pane
   for (const [x0, x1] of win) { col.add('glass', planeAt(x1 - x0, y1 - y0, (x0 + x1) / 2, (y0 + y1) / 2, z - 0.014, { ry: Math.PI })); col.add('windowFrame', planeAt(x1 - x0 + 0.08, y1 - y0 + 0.08, (x0 + x1) / 2, (y0 + y1) / 2, z - 0.009, { ry: Math.PI })); }
-  // M door (centre, red) with its window, outline and handle — bottom-hinged detrainment door
-  const dTop = spec.doorSill + spec.doorHeight - 0.05;
-  col.add('red', boxAt(0.62, dTop - spec.doorSill, 0.02, 0, (dTop + spec.doorSill) / 2, z - 0.012));
-  col.add('dark', boxAt(0.66, 0.02, 0.03, 0, dTop + 0.01, z - 0.015)); for (const x of [-0.32, 0.32]) col.add('dark', boxAt(0.02, dTop - spec.doorSill + 0.02, 0.03, x, (dTop + spec.doorSill) / 2, z - 0.015));
-  col.add('glass', planeAt(0.42, y1 - y0 - 0.1, 0, (y0 + y1) / 2, z - 0.026, { ry: Math.PI })); col.add('windowFrame', planeAt(0.48, y1 - y0 - 0.04, 0, (y0 + y1) / 2, z - 0.021, { ry: Math.PI }));
-  col.add('steel', boxAt(0.03, 0.22, 0.04, 0.24, spec.floorHeight + 1.0, z - 0.03));
+  // M door (red) with its window, outline and handle — bottom-hinged detrainment door: central on the 1996 TS, offset to the
+  // viewer's right on the S7 (whose windscreens are therefore unequal)
+  const dTop = spec.doorSill + spec.doorHeight - 0.05; const dx = isS7 ? -0.42 : 0; const dw0 = isS7 ? 0.70 : 0.62;
+  col.add('red', boxAt(dw0, dTop - spec.doorSill, 0.02, dx, (dTop + spec.doorSill) / 2, z - 0.012));
+  col.add('dark', boxAt(dw0 + 0.04, 0.02, 0.03, dx, dTop + 0.01, z - 0.015)); for (const x of [-dw0 / 2 - 0.01, dw0 / 2 + 0.01]) col.add('dark', boxAt(0.02, dTop - spec.doorSill + 0.02, 0.03, dx + x, (dTop + spec.doorSill) / 2, z - 0.015));
+  col.add('glass', planeAt(dw0 - 0.2, y1 - y0 - 0.1, dx, (y0 + y1) / 2, z - 0.026, { ry: Math.PI })); col.add('windowFrame', planeAt(dw0 - 0.14, y1 - y0 - 0.04, dx, (y0 + y1) / 2, z - 0.021, { ry: Math.PI }));
+  col.add('steel', boxAt(0.03, 0.22, 0.04, dx + 0.24, spec.floorHeight + 1.0, z - 0.03));
   // destination display housing (screen mesh added per train): orange LEDs above the M door / in the black band
   const dy = isS7 ? 3.18 : 2.56, dw = isS7 ? 1.5 : 1.16, dh = isS7 ? 0.24 : 0.22;
   col.add('windowFrame', boxAt(isS7 ? 2.6 : dw + 0.08, dh + 0.06, 0.05, 0, dy, z - 0.02));
@@ -180,14 +191,14 @@ function buildCabFront(spec, lay, col, atlas) {
   for (const x of [-0.70, 0.70]) col.add('rubber', boxAt(0.018, 0.62, 0.014, x, (y0 + y1) / 2 - 0.05, z - 0.03, { rz: x < 0 ? 0.45 : -0.45 }));
   // train number: 1996 white 120 mm on the left-hand grey valance panel + de-icing circle; S7 white 45 mm between the M door and the display
   if (atlas) {
-    if (isS7) col.add('decal', planeAt(0.22, 0.14, 0, dTop + 0.14, z - 0.016, { ry: Math.PI, uvRect: atlas.rect('unitNoWhite') }));
+    if (isS7) col.add('decal', planeAt(0.22, 0.14, 0.45, dTop + 0.14, z - 0.016, { ry: Math.PI, uvRect: atlas.rect('unitNoWhite') }));
     else { col.add('decal', planeAt(0.42, 0.26, 0.72, bb + 0.24, z - 0.012, { ry: Math.PI, uvRect: atlas.rect('unitNoWhite') })); col.add('decal', planeAt(0.09, 0.09, 1.02, bb + 0.24, z - 0.012, { ry: Math.PI, uvRect: atlas.rect('deicing') })); }
   }
   // anti-climber / buffer beam and the brow over the display
   col.add('dark', boxAt(2 * xAt(P, bb) - 0.2, 0.12, 0.10, 0, bb + 0.06, z - 0.05));
   col.add(isS7 ? 'cabFace' : 'roof', boxAt(dw + 0.5, 0.06, 0.12, 0, dy + dh / 2 + 0.06, z - 0.05));
   lay.lamps = [[-1, 'head', -0.96 - 0.08, ly], [-1, 'tail', -0.96 + 0.09, ly], [1, 'head', 0.96 + 0.08, ly], [1, 'tail', 0.96 - 0.09, ly]].map(([s, kind, x, y]) => ({ kind, x, y, z: z - 0.03 }));
-  lay.destDisplay = { x: 0, y: dy, z: z - 0.048, w: dw, h: dh };
+  lay.destDisplay = { x: 0, y: dy, z: z - 0.048, w: dw, h: dw / 9 };   // LED matrix 144 × 16 cells (aspect 9) inside the housing
 }
 
 /** Everything for one car type: merged geometries per material + layout + collision model. Cached per stock/type/atlas. */
@@ -196,7 +207,7 @@ function carAssembly(spec, carIndex, atlas) {
   const wc = (spec.wheelchairCars || []).includes(carIndex);
   const key = `${spec.code}:${isDM ? 'DM' : 'M' + (wc ? 'W' : '')}:${atlas.texture.uuid}`;
   if (assemblyCache.has(key)) return assemblyCache.get(key);
-  const lay = carLayout(spec, carIndex); const col = new Collector();
+  const lay = carLayout(spec, carIndex); const col = new Collector(materialAliases(spec));
   buildExterior(spec, lay, col, atlas);
   buildInterior(spec, lay, col, atlas);
   const geos = col.merged();
@@ -234,26 +245,28 @@ export class Train {
     const offsets = carOffsets(spec);
     const castKeys = new Set(['body', 'lowerBody', 'roof', 'blue', 'red', 'dark', 'cabFace']);
     // per-train dynamic textures
-    this.led = T.ledStrip({ width: 1024, height: 96, color: '#ff9e1b' });
+    this.led = ledMatrixText({ cols: 16 * LED_ASPECT, rows: 16, color: spec.code === '1996' ? '#ff8c1a' : '#ff9e1b' });   // saloon displays (amber/orange LED)
     this.ledMat = M.screen(this.led.texture, 1.5);
-    this.dest = T.dotMatrix({ cols: 90, rows: 1, dot: 6, gap: 2, color: '#ff8a00' });
+    this.dest = ledMatrixText({ cols: 144, rows: 16, color: '#ff8a00' });    // cab-front destination (orange LED)
     this.destMat = M.screen(this.dest.texture, 1.8);
+    const mapMat = M.signMaterial(tubeMapTexture(), { emissive: 0.45 });
     const diagramTex = T.lineDiagram({ line: this.line === 'circle' ? 'Circle' : (spec.line === 'jubilee' ? 'Jubilee' : 'District'), color: lineColor, stations: this.line === 'circle' && spec.circleDiagram ? spec.circleDiagram : spec.lineDiagram, current: 'Westminster', width: 4096, height: 256 });
     const diagramMat = M.signMaterial(diagramTex, { emissive: 0.45 });
     const posterMats = [M.signMaterial(T.poster({ headline: 'Mind the gap', sub: 'Please take care when boarding', seed: 11, hue: 210 }), { emissive: 0.4 }), M.signMaterial(T.poster({ headline: 'Keep hold of your bag', sub: 'Please keep belongings with you', seed: 12, hue: 30 }), { emissive: 0.4 }), M.signMaterial(T.poster({ headline: 'Plan ahead', sub: 'Check before you travel', seed: 13, hue: 300 }), { emissive: 0.4 })];
     const invisible = new THREE.MeshBasicMaterial({ visible: false });
-    const leafGroups = new Map(); const wheelSlots = [], displaySlots = [], diagramSlots = [], posterSlots = [[], [], []];
+    const leafGroups = new Map(); const wheelSlots = [], displaySlots = [], diagramSlots = [], mapSlots = [], posterSlots = [[], [], []];
     for (const c of offsets) {
       const asm = carAssembly(spec, c.car, atlas); const lay = asm.lay;
+      const flip = c.car === spec.cars - 1;   // the rear DM is the front DM's geometry turned through 180° (the layout is shared, so decide per car here)
       const carG = new THREE.Group(); carG.name = `car-${c.car}`; carG.position.set(0, 0, -c.offset);
-      const body = new THREE.Group(); body.name = 'body'; if (lay.flip) body.rotation.y = Math.PI; carG.add(body);
+      const body = new THREE.Group(); body.name = 'body'; if (flip) body.rotation.y = Math.PI; carG.add(body);
       for (const [key, geo] of Object.entries(asm.geos)) {
         const mat = key === 'decal' ? decalMat : mats[key]; if (!mat) { console.warn('[trains] no material for', key); continue; }
         const mesh = new THREE.Mesh(geo, mat); mesh.name = key; mesh.castShadow = castKeys.has(key); mesh.receiveShadow = true;
         if (key === 'glass' || key === 'clearGlass') mesh.renderOrder = 2; if (key === 'decal') mesh.renderOrder = 1;
         body.add(mesh);
       }
-      const car = { index: c.car, offset: c.offset, len: c.length, half: c.length / 2, group: carG, body, lay, coll: asm.coll, flip: lay.flip, mat: new THREE.Matrix4(), inv: new THREE.Matrix4(), phase: Math.random() * 6.28 };
+      const car = { index: c.car, offset: c.offset, len: c.length, half: c.length / 2, group: carG, body, lay, coll: asm.coll, flip, mat: new THREE.Matrix4(), inv: new THREE.Matrix4(), phase: Math.random() * 6.28 };
       this.cars.push(car); this.group.add(carG);
       // door leaves (geometry space: +x side built, -x side turned through 180°).
       // lead = +1 → leading edge at +z: the leaf in the -z half of a doorway leads towards the centre; a single leaf leads towards the car centre.
@@ -262,7 +275,7 @@ export class Train {
         for (const [lead, zc, w] of leaves) {
           const geomLead = gside > 0 ? lead : -lead; const gkey = `${w.toFixed(3)}:${geomLead}`;
           let lg = leafGroups.get(gkey); if (!lg) { lg = { width: w, lead: geomLead, items: [] }; leafGroups.set(gkey, lg); }
-          const leaf = { car, doorway: d, gside, lead, zc, width: w, openDir: -lead, side: (lay.flip ? -gside : gside) > 0 ? 'right' : 'left', group: lg, id: lg.items.length };
+          const leaf = { car, doorway: d, gside, lead, zc, width: w, openDir: -lead, side: (flip ? -gside : gside) > 0 ? 'right' : 'left', group: lg, id: lg.items.length };
           lg.items.push(leaf); this.leaves.push(leaf);
         }
       }
@@ -274,12 +287,16 @@ export class Train {
       let pk = c.car % 3;
       for (const p of lay.panels) {
         const y = spec.windowTop + 0.14 + (spec.code === 'S7' ? 0.04 : 0); const m = surfaceMatrix(spec.interior, y, p.z, p.side, 0.010).multiply(new THREE.Matrix4().makeScale(p.w, p.h, 1));
-        if (p.kind === 'diagram') diagramSlots.push({ car, m }); else { posterSlots[pk % 3].push({ car, m }); pk++; }
+        if (p.kind === 'diagram') diagramSlots.push({ car, m }); else if (p.kind === 'map') mapSlots.push({ car, m }); else { posterSlots[pk % 3].push({ car, m }); pk++; }
       }
       // lamps + destination display (DM)
       if (lay.lamps) {
-        for (const l of lay.lamps) { const g = new THREE.CircleGeometry(l.kind === 'head' ? 0.062 : 0.045, 16); g.rotateY(Math.PI); g.translate(l.x, l.y, l.z); const mesh = new THREE.Mesh(g, l.kind === 'head' ? mats.headOff : mats.tailOff); body.add(mesh); this.lamps.push({ mesh, kind: l.kind, car: c.car }); }
-        const dd = lay.destDisplay; const dg = new THREE.PlaneGeometry(dd.w, dd.h); dg.rotateY(Math.PI); dg.translate(dd.x, dd.y, dd.z); body.add(new THREE.Mesh(dg, this.destMat));
+        // one mesh per lamp kind (the pair of head lamps, the pair of tail lamps) so switching is one material swap and two draws
+        for (const kind of ['head', 'tail']) {
+          const parts = lay.lamps.filter(l => l.kind === kind).map(l => { const g = new THREE.CircleGeometry(kind === 'head' ? 0.062 : 0.045, 16); g.rotateY(Math.PI); g.translate(l.x, l.y, l.z); return g; });
+          const mesh = new THREE.Mesh(mergeGeometries(parts, false), kind === 'head' ? mats.headOff : mats.tailOff); mesh.name = kind + 'lamps'; body.add(mesh); this.lamps.push({ mesh, kind, car: c.car });
+        }
+        const dd = lay.destDisplay; const dg = new THREE.PlaneGeometry(dd.w, dd.w / this.dest.aspect); dg.rotateY(Math.PI); dg.translate(dd.x, dd.y, dd.z); body.add(new THREE.Mesh(dg, this.destMat));
       }
       // sittable seats
       for (const s of lay.seats) if (s.interactive) {
@@ -292,14 +309,16 @@ export class Train {
     const mk = (geo, mat, slots, name) => { const im = new THREE.InstancedMesh(geo, mat, Math.max(1, slots.length)); im.count = slots.length; im.name = name; im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.group.add(im); this.instanced.push({ mesh: im, slots }); return im; };
     for (const lg of leafGroups.values()) {
       const geo = leafGeometry(spec, lg.width, lg.lead, atlas);
-      const im = mk(geo, [mats.red, mats.glass, mats.rubber, mats.yellow, mats.pole, decalMat], lg.items, 'leaves'); im.castShadow = true; lg.mesh = im;
+      const al = materialAliases(spec); const pick = (k) => mats[al[k] || k];
+      const im = mk(geo, [mats.red, mats.glass, pick('rubber'), pick('pole'), decalMat], lg.items, 'leaves'); im.castShadow = true; lg.mesh = im;
       for (const leaf of lg.items) leaf.mesh = im;
     }
     this.wheelMesh = mk(wheelGeometry(spec.wheelDiameter), mats.wheel, wheelSlots, 'wheels'); this.wheelSlots = wheelSlots;
     if (displaySlots.length) mk(new THREE.PlaneGeometry(1, 1), this.ledMat, displaySlots, 'led');
     if (diagramSlots.length) mk(new THREE.PlaneGeometry(1, 1), diagramMat, diagramSlots, 'diagrams');
+    if (mapSlots.length) mk(new THREE.PlaneGeometry(1, 1), mapMat, mapSlots, 'maps');
     posterSlots.forEach((slots, i) => { if (slots.length) mk(new THREE.PlaneGeometry(1, 1), posterMats[i], slots, 'posters'); });
-    this._ownMaterials = [this.ledMat, this.destMat, diagramMat, ...posterMats, invisible];
+    this._ownMaterials = [this.ledMat, this.destMat, diagramMat, mapMat, ...posterMats, invisible];
     this._refreshCarMatrices(); this._updateInstances(); this._dirty = false;
   }
 
@@ -462,12 +481,12 @@ export class Train {
 
   // ---------------- contract: displays, speed, lights ----------------
   setDisplay(text) {
-    this.displayText = text || ''; this.displayPages = paginate(this.displayText, 1024 - 40, 96 * 0.62); this.displayPage = 0; this.displayTimer = 0;
+    this.displayText = text || ''; this.displayPages = this.led.paginate(this.displayText); this.displayPage = 0; this.displayTimer = 0;
     this.led.set(this.displayPages[0] || '');
   }
   setDestination(text) {
-    this.destText = String(text || '').toUpperCase(); this.destCols = this.destText.length * 6 - 1; this.destScroll = 0; this.destTimer = 0;
-    this.dest.set([this.destText], { scroll: this.destCols > 90 ? -90 : -Math.floor((90 - this.destCols) / 2) });
+    this.destText = String(text || '').toUpperCase();
+    this.dest.set(this.destText);
   }
   setSpeed(v, accel = 0) {
     const was = this._lastSpeed; this.speed = v; this.accel = accel; this._lastSpeed = v;
@@ -512,7 +531,6 @@ export class Train {
     this._frameCounter++;
     if (this._dirty || doorsMoving || (moving && (this._near || this._frameCounter % 4 === 0))) { this._updateInstances(doorsMoving && !moving && !this._dirty); this._dirty = false; }
     if (this.displayPages && this.displayPages.length > 1) { this.displayTimer += dt; if (this.displayTimer > 3.2) { this.displayTimer = 0; this.displayPage = (this.displayPage + 1) % this.displayPages.length; this.led.set(this.displayPages[this.displayPage]); } }
-    if (this.destCols > 90) { this.destTimer += dt; if (this.destTimer > 0.09) { this.destTimer = 0; this.destScroll += 1; if (this.destScroll > this.destCols) this.destScroll = -90; this.dest.set([this.destText], { scroll: this.destScroll }); } }
     if (this._seated) this._followSeat();
   }
   /** Recompute every instance matrix from the car frames. `leavesOnly` = doors are animating on a standing train. */
@@ -539,7 +557,11 @@ export class Train {
   _sit(rec) {
     const player = this.ctx.player; if (!player || !player.sit) return;
     const s = rec.seat; const car = rec.car;
-    const wp = rec.proxy.getWorldPosition(new THREE.Vector3()); wp.y = this.group.getWorldPosition(_v2).y + this.floorY + this.spec.seatCushion - 0.02;
+    const wp = rec.proxy.getWorldPosition(new THREE.Vector3()); wp.y = this.group.getWorldPosition(_v2).y + this.floorY + SEAT_EYE_BASE;
+    // sat down from the platform through an open door? then ride with us: put the player in the aisle in front of the seat and attach
+    if (player.train !== this && player.attachTrain && player.pos) {
+      const stand = new THREE.Vector3(s.x - s.side * 0.55, this.floorY, s.z).applyMatrix4(car.mat); this.group.localToWorld(stand); player.pos.copy(stand); player.attachTrain(this);
+    }
     const dirG = s.kind === 'transverse' ? new THREE.Vector3(0, 0, s.facing) : new THREE.Vector3(-s.side, 0, 0);
     const dirW = dirG.applyQuaternion(car.body.getWorldQuaternion(_q)).normalize();
     const yaw = Math.atan2(-dirW.x, -dirW.z);
@@ -553,7 +575,7 @@ export class Train {
   _followSeat() {
     const st = this._seated; const player = st.player;
     if (!player || player.seated !== st.seat) { this._seated = null; return; }
-    st.rec.proxy.getWorldPosition(st.seat.position); st.seat.position.y = this.group.getWorldPosition(_v2).y + this.floorY + this.spec.seatCushion - 0.02;
+    st.rec.proxy.getWorldPosition(st.seat.position); st.seat.position.y = this.group.getWorldPosition(_v2).y + this.floorY + SEAT_EYE_BASE;
     const y = yawOf(st.rec.car.mat); const dy = y - st.lastYaw; st.lastYaw = y; if (Math.abs(dy) < 1) player.yaw += dy;
   }
 
@@ -574,16 +596,3 @@ export function createTrain(ctx, opts = {}) { return opts.stock === 'S7' ? new T
 
 // ---------------- helpers ----------------
 function yawOf(m) { const e = m.elements; return Math.atan2(e[8], e[10]); }   // rotation about Y of a (rotation-only) matrix
-
-let _measureCtx = null;
-/** Split text into pages that fit the LED strip at the given px font size. */
-function paginate(text, maxPx, fontPx) {
-  if (!text) return [''];
-  if (!_measureCtx) { try { _measureCtx = document.createElement('canvas').getContext('2d'); } catch (e) { return [text]; } }
-  const c = _measureCtx; c.font = `bold ${fontPx}px Johnston, 'Gill Sans', Helvetica, Arial, sans-serif`;
-  if (c.measureText(text).width <= maxPx) return [text];
-  const words = text.split(/\s+/); const pages = []; let cur = '';
-  for (const w of words) { const trial = cur ? cur + ' ' + w : w; if (c.measureText(trial).width <= maxPx || !cur) cur = trial; else { pages.push(cur); cur = w; } }
-  if (cur) pages.push(cur);
-  return pages;
-}

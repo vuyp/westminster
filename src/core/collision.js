@@ -79,6 +79,9 @@ export class Collision {
 
   _cell(x, z) { return this.grid.get(Math.floor(x / CELL) + ',' + Math.floor(z / CELL)); }
 
+  /** All floors registered in the grid cell containing (x,z) — cheap candidate list for callers that do their own filtering. */
+  floorsAt(x, z) { const c = this._cell(x, z); return c ? c.floors : []; }
+
   /** Height of a floor at (x,z), or null. */
   static heightOf(f, x, z) {
     if (f.kind === 'flat') { if (x < f.xMin || x > f.xMax || z < f.zMin || z > f.zMax) return null; return f.y; }

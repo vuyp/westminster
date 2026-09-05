@@ -141,8 +141,8 @@ export function planeAt(w, h, x, y, z, { rx = 0, ry = 0, rz = 0, uvRect = null }
 
 /** Gathers geometries per material key and merges them into one geometry per key. */
 export class Collector {
-  constructor() { this.map = new Map(); }
-  add(key, geo) { if (!geo) return; let l = this.map.get(key); if (!l) { l = []; this.map.set(key, l); } l.push(geo); return geo; }
+  constructor(aliases = {}) { this.map = new Map(); this.aliases = aliases; }
+  add(key, geo) { if (!geo) return; key = this.aliases[key] || key; let l = this.map.get(key); if (!l) { l = []; this.map.set(key, l); } l.push(geo); return geo; }
   /** → { key: mergedGeometry } */
   merged() {
     const out = {};
@@ -170,9 +170,9 @@ const FONT = T.SIGN_FONT;
 export function decalAtlas(spec, { unitNumber = spec.unitNumbers[0], lineName = spec.line === 'jubilee' ? 'Jubilee line' : 'District line', lineColor = spec.line === 'jubilee' ? '#a0a5a9' : '#00782a' } = {}) {
   const key = spec.code + ':' + unitNumber + ':' + lineName;
   if (atlasCache.has(key)) return atlasCache.get(key);
-  const S = 1024, C = 256; const c = T.canvas(S, S); const ctx = c.getContext('2d');
+  const S = 1024, SH = 1152, C = 256; const c = T.canvas(S, SH); const ctx = c.getContext('2d');   // 4 × 4 cells + a 128 px strip of small labels
   const cells = {}; const rects = {};
-  const cell = (name, col, row, wc = 1, hc = 1) => { cells[name] = { x: col * C, y: row * C, w: wc * C, h: hc * C }; rects[name] = { u0: col * C / S + 0.004, u1: (col + wc) * C / S - 0.004, v0: 1 - (row + hc) * C / S + 0.004, v1: 1 - row * C / S - 0.004, aspect: wc / hc }; return cells[name]; };
+  const cell = (name, col, row, wc = 1, hc = 1) => { cells[name] = { x: col * C, y: row * C, w: wc * C, h: hc * C }; rects[name] = { u0: col * C / S + 0.004, u1: (col + wc) * C / S - 0.004, v0: 1 - (row + hc) * C / SH + 0.003, v1: 1 - row * C / SH - 0.003, aspect: wc / hc }; return cells[name]; };
   const text = (str, x, y, size, { color = '#000', weight = 'bold', align = 'center', font = FONT, maxW = null } = {}) => {
     ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; let fs = size; ctx.font = `${weight} ${fs}px ${font}`;
     if (maxW) while (ctx.measureText(str).width > maxW && fs > 6) { fs -= 1; ctx.font = `${weight} ${fs}px ${font}`; }
@@ -212,12 +212,14 @@ export function decalAtlas(spec, { unitNumber = spec.unitNumbers[0], lineName = 
   { const r = cell('endDoor', 3, 3); if (is96) { rrect(r.x + 8, r.y + 60, C - 16, C - 120, 8, '#c8102e'); text('This door', r.x + C / 2, r.y + 100, 28, { color: '#fff' }); text('is alarmed', r.x + C / 2, r.y + 136, 28, { color: '#fff' }); }
     else { rrect(r.x + 8, r.y + 60, C - 16, C - 120, 8, '#f4f4f4'); text('Please keep', r.x + C / 2, r.y + 100, 24, { color: '#111' }); text('the gangway clear', r.x + C / 2, r.y + 136, 24, { color: '#111' }); } }
   // door-leaf labels in the free corner of the last cell: 'Caution – Sliding doors' 130 × 52 (yellow/black), leading-edge hazard strip (vertical), interior 'Items trapped in the doors cause delays' yellow strip (vertical), white cab-front number
-  const sub = (name, x, y, w, h) => { rects[name] = { u0: x / S + 0.002, u1: (x + w) / S - 0.002, v0: 1 - (y + h) / S + 0.002, v1: 1 - y / S - 0.002, aspect: w / h }; return { x, y, w, h }; };
-  { const r = sub('slidingDoors', 780, 776, 236, 96); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, 26, r.h); text('CAUTION', r.x + 30 + (r.w - 30) / 2, r.y + 30, 26, { color: '#111' }); text('Sliding doors', r.x + 30 + (r.w - 30) / 2, r.y + 66, 24, { color: '#111', weight: 'normal' }); }
-  { const r = sub('hazard', 780, 880, 60, 136); hazard(r.x, r.y, r.w, r.h, true); }
-  { const r = sub('itemsTrapped', 850, 880, 60, 136); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.save(); ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.rotate(-Math.PI / 2); text(is96 ? 'Items trapped in the doors cause delays' : 'Mind the gap · items trapped in doors', 0, 0, 13, { color: '#111', maxW: r.h - 8 }); ctx.restore(); }
-  { const r = sub('unitNoWhite', 920, 880, 96, 60); text(unitNumber, r.x + r.w / 2, r.y + r.h / 2, 30, { color: '#fff', weight: '600' }); }
-  { const r = sub('deicing', 920, 950, 60, 60); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r.x + 30, r.y + 30, 26, 0, Math.PI * 2); ctx.fill(); }
+  const sub = (name, x, y, w, h) => { rects[name] = { u0: x / S + 0.002, u1: (x + w) / S - 0.002, v0: 1 - (y + h) / SH + 0.002, v1: 1 - y / SH - 0.002, aspect: w / h }; return { x, y, w, h }; };
+  { const r = sub('slidingDoors', 8, 1040, 236, 96); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, 26, r.h); text('CAUTION', r.x + 30 + (r.w - 30) / 2, r.y + 30, 26, { color: '#111' }); text('Sliding doors', r.x + 30 + (r.w - 30) / 2, r.y + 66, 24, { color: '#111', weight: 'normal' }); }
+  { const r = sub('hazard', 260, 1032, 60, 112); hazard(r.x, r.y, r.w, r.h, true); }
+  { const r = sub('itemsTrapped', 330, 1032, 60, 112); ctx.fillStyle = '#ffcd00'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.save(); ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.rotate(-Math.PI / 2); text(is96 ? 'Items trapped in the doors cause delays' : 'Mind the gap · items trapped in doors', 0, 0, 13, { color: '#111', maxW: r.h - 8 }); ctx.restore(); }
+  { const r = sub('unitNoWhite', 400, 1040, 120, 60); text(unitNumber, r.x + r.w / 2, r.y + r.h / 2, 36, { color: '#fff', weight: '600' }); }
+  { const r = sub('deicing', 540, 1036, 64, 64); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r.x + 32, r.y + 32, 27, 0, Math.PI * 2); ctx.fill(); }
+  // door reference letter (white 17 mm caps) and the 1996 blue 'This is a 7-car train' style unit plate are too small to read; a plain white 'A'
+  { const r = sub('doorLetter', 620, 1036, 48, 64); text('A', r.x + 24, r.y + 32, 44, { color: '#fff' }); }
 
   const texture = T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping }); texture.anisotropy = 8;
   const out = { texture, rect: n => rects[n], rects };
@@ -227,10 +229,33 @@ export function decalAtlas(spec, { unitNumber = spec.unitNumbers[0], lineName = 
 // ---------- materials ----------
 
 const matCache = new Map();
+/** Satin aluminium bodyside: brushed-metal map (metric, 1 m tiles) with a roughness map so the panels catch the light unevenly. */
+function brushedBody(color, metalness, roughness, seed, strength = 0.45) {
+  const tex = T.brushedMetal({ base: color, seed, vertical: false });
+  // soften the brush: composite the streaks over the flat colour at reduced alpha, and add faint horizontal panel seams
+  const src = tex.map.image; const c = T.canvas(src.width, src.height); const ctx = c.getContext('2d');
+  ctx.fillStyle = '#' + color.toString(16).padStart(6, '0'); ctx.fillRect(0, 0, c.width, c.height);
+  ctx.globalAlpha = strength; ctx.drawImage(src, 0, 0); ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(0, Math.floor(c.height * 0.5) - 1, c.width, 2);
+  const map = T.toTexture(c); map.repeat.set(1 / tex.metres, 1 / tex.metres); map.needsUpdate = true;
+  const rough = tex.roughnessMap.clone(); rough.repeat.set(1 / tex.metres, 1 / tex.metres); rough.needsUpdate = true;
+  return new THREE.MeshStandardMaterial({ color: 0xffffff, map, roughnessMap: rough, roughness, metalness });
+}
 function lit(color, e, { roughness = 0.75, metalness = 0 } = {}) { return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: e, roughness, metalness }); }
 function litMap(tex, metres, e, { roughness = 0.8, metalness = 0 } = {}) {
   const map = tex.clone(); map.repeat.set(1 / metres, 1 / metres); map.needsUpdate = true;
   return new THREE.MeshStandardMaterial({ color: 0xffffff, map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: e, roughness, metalness });
+}
+
+/**
+ * Per-stock aliases: parts that happen to be the same colour on this stock share ONE merged mesh (Collector keys are
+ * rewritten through this table), which is what keeps a 7-car train under ~180 draw calls.
+ */
+export function materialAliases(spec) {
+  const is96 = spec.code === '1996';
+  return is96
+    ? { ledHousing: 'dark', lampHousing: 'lining', strap: 'dark', rubber: 'dark', steel: 'pole', cabDark: 'dark', cabFace: 'blue', cabDoor: 'blue', mDoor: 'red' }
+    : { ledHousing: 'dark', lampHousing: 'lining', strap: 'pole', armrest: 'pole', rubber: 'dark', roof: 'body', cabDark: 'dark', cabFace: 'red', cabDoor: 'body', valance: 'blue', mDoor: 'red' };
 }
 
 /** All materials for a stock; cached so every train of that stock shares them (fewer state changes). */
@@ -240,8 +265,8 @@ export function trainMaterials(spec) {
   const L = spec.livery; const is96 = spec.code === '1996';
   const floorTex = T.granite({ base: L.floor, light: L.floorGroove, dark: is96 ? 0x1e1f21 : 0x3a3d40, joints: false, seed: is96 ? 23 : 29 });
   const mats = {
-    body: M.paint(L.body, { roughness: 0.42, metalness: is96 ? 0.8 : 0.55 }),
-    lowerBody: M.paint(L.lowerBody, { roughness: 0.5, metalness: is96 ? 0.75 : 0.55 }),
+    body: brushedBody(L.body, is96 ? 0.78 : 0.5, is96 ? 0.40 : 0.36, is96 ? 5 : 6, is96 ? 0.30 : 0.20),
+    lowerBody: brushedBody(L.lowerBody, is96 ? 0.72 : 0.5, 0.48, 5, is96 ? 0.32 : 0.20),
     blue: M.paint(0x0019a8, { roughness: 0.5, metalness: 0.2 }),
     red: M.paint(L.doors, { roughness: 0.4, metalness: 0.2 }),
     cabFace: M.paint(L.cabFace, { roughness: 0.45, metalness: 0.2 }),
@@ -249,7 +274,7 @@ export function trainMaterials(spec) {
     cabDoor: M.paint(L.cabDoors, { roughness: 0.45, metalness: is96 ? 0.2 : 0.55 }),
     roof: M.paint(L.roof, { roughness: 0.7, metalness: 0.35 }),
     windowFrame: M.paint(L.windowFrame, { roughness: 0.55, metalness: 0.3 }),
-    glass: M.glass({ tint: L.windowTint, opacity: 0.62, roughness: 0.06 }),
+    glass: M.glass({ tint: L.windowTint, opacity: 0.42, roughness: 0.06 }),   // light tint: you can see the platform from a seat
     clearGlass: M.glass({ color: 0xe4edf2, opacity: 0.22, roughness: 0.04 }),
     rubber: M.rubber(0x141414),
     bellows: new THREE.MeshStandardMaterial({ color: is96 ? 0x1b1b1b : 0x4a4c4f, roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
@@ -268,7 +293,7 @@ export function trainMaterials(spec) {
     lampHousing: M.paint(0xf4f4f0, { roughness: 0.5, metalness: 0.1 }),
     perforated: (() => { const p = T.perforated({ color: 0xe2e3e5 }); return litMap(p.map, p.metres, 0.15, { roughness: 0.5, metalness: 0.3 }); })(),
     headOn: M.luminaire(is96 ? 0xfff1d6 : 0xffffff, 3.2), headOff: M.paint(0xcfd5da, { roughness: 0.25, metalness: 0.6 }),
-    tailOn: M.luminaire(0xff2a1a, 2.6), tailOff: M.paint(0x6e1410, { roughness: 0.3, metalness: 0.4 }),
+    tailOn: M.luminaire(0xff0a06, 1.6), tailOff: M.paint(0x6e1410, { roughness: 0.3, metalness: 0.4 }),
     cabDark: M.paint(0x25272b, { roughness: 0.85, metalness: 0.2 }),
     wheel: M.paint(0x6a6d72, { roughness: 0.45, metalness: 0.7 }),
     indicator: M.luminaire(0xff8a1a, 0.9),
@@ -301,16 +326,18 @@ export function wheelGeometry(diameter) {
 }
 
 /**
- * A door leaf for the +x bodyside, centred on z = 0, hanging on the car profile with the outer face 50 mm behind the skin
- * (the leaf slides in the pocket between the outer skin and the interior lining). `lead` = +1 → leading edge at +z.
- * Geometry groups (in order): red panel, glass, rubber gasket/seal, yellow (leading-edge hazard strip backing),
- * pole-coloured interior grab handle, decals (labels from the atlas).
+ * A door leaf for the +x bodyside, centred on z = 0, hanging on the car profile OUTSIDE the skin (externally hung, as on
+ * both the 1996 TS and the S7: the open leaves sit over the bodyside beside the doorway). `lead` = +1 → leading edge at +z.
+ * Geometry groups (in order): red panel, glass, rubber gasket/seal, pole-coloured interior grab handle, decals (labels
+ * from the atlas, including the opaque yellow/black leading-edge hazard strip).
  */
 export function leafGeometry(spec, width, lead, atlas) {
   const key = `leaf:${spec.code}:${width}:${lead}:${atlas ? atlas.texture.uuid : ''}`; if (geoCache.has(key)) return geoCache.get(key);
   const P = spec.profile; const sill = spec.doorSill + 0.015, top = spec.doorSill + spec.doorHeight - 0.02; const [wb, wt] = spec.doorWindow;
-  const w = width, hw = w / 2, e = 0.09; const out = 0.05, inn = 0.10; const is96 = spec.code === '1996';
-  const red = [], glass = [], rubber = [], yellow = [], pole = [], decal = [];
+  // Both stocks hang their leaves OUTSIDE the bodyside (dossier §8.1 'externally-hung'): outer face 42 mm proud of the
+  // skin, inner face just inside the skin plane, so an open leaf slides over the adjacent window from the outside.
+  const w = width, hw = w / 2, e = 0.09; const out = -0.042, inn = 0.004; const is96 = spec.code === '1996';
+  const red = [], glass = [], rubber = [], pole = [], decal = [];
   for (const [ins, flip] of [[out, false], [inn, true]]) {
     red.push(profileStrip(P, sill, wb, -hw, hw, { inset: ins, flip }));
     red.push(profileStrip(P, wt, top, -hw, hw, { inset: ins, flip }));
@@ -329,7 +356,6 @@ export function leafGeometry(spec, width, lead, atlas) {
   // leading-edge hazard strip (exterior): 1996 70 × 606 mm at c. 1.0–1.6 m above the floor; S7 80 × 304 mm, top aligned with the window tops
   const hz0 = is96 ? sill + 0.95 : wt - 0.30, hz1 = is96 ? sill + 1.56 : wt; const hzw = is96 ? 0.07 : 0.08;
   const edgeZ0 = lead > 0 ? hw - hzw : -hw, edgeZ1 = lead > 0 ? hw : -hw + hzw;
-  yellow.push(profileStrip(P, hz0, hz1, edgeZ0, edgeZ1, { inset: out - 0.004 }));
   // interior grab handle near the leading edge
   const hzc = lead * (hw - 0.14);
   pole.push(profileTube(P, sill + 0.75, sill + 1.55, hzc, inn + 0.045, 0.016));
@@ -343,8 +369,10 @@ export function leafGeometry(spec, width, lead, atlas) {
     const itZ = lead > 0 ? [hw - 0.15, hw - 0.075] : [-hw + 0.075, -hw + 0.15];
     put('itemsTrapped', sill + 0.95, sill + (is96 ? 1.215 : 1.37), itZ[0], itZ[1], inn + 0.006, true);
     put('standClear', wt + 0.02, wt + 0.07, -hw + 0.1, hw - 0.1, inn + 0.006, true);
+    // door reference letter: 17 mm white caps, 20 mm down from the top of the leaf and 20 mm in from the edge
+    const lz = lead > 0 ? [hw - 0.045, hw - 0.02] : [-hw + 0.02, -hw + 0.045]; put('doorLetter', top - 0.045, top - 0.02, lz[0], lz[1], out - 0.006, false);
   }
-  const parts = [red, glass, rubber, yellow, pole, decal].map(list => list.length ? mergeGeometries(list, false) : new THREE.PlaneGeometry(0.001, 0.001));
+  const parts = [red, glass, rubber, pole, decal].map(list => list.length ? mergeGeometries(list, false) : new THREE.PlaneGeometry(0.001, 0.001));
   const g = mergeGeometries(parts, true); g.computeBoundingSphere();
   geoCache.set(key, g); return g;
 }
@@ -359,6 +387,96 @@ export function seatGeometry(spec, { width = 0.44, xBack = 1.0, floorY = 0, side
   if (base) { out.base = boxAt(depth - 0.16, cush - 0.03, width - 0.01, side * (xBack - 0.08 - (depth - 0.16) / 2), y0 + (cush - 0.03) / 2, 0); }
   else { out.base = boxAt(0.06, 0.05, width - 0.06, side * (xBack - depth + 0.10), y0 + cush - 0.13, 0); }
   return out;
+}
+
+// ---------- LED dot-matrix text (proportional font sampled onto an LED grid) ----------
+
+/**
+ * An updatable orange LED matrix that renders proportional text (as the real destination and saloon displays do),
+ * so any aspect ratio can be matched by choosing cols/rows. Text wider than the grid is shrunk down to `minScale`;
+ * beyond that it is clipped, so use paginate() for long messages.
+ *   ledMatrixText({ cols, rows, dot, gap, color }) → { texture, set(text, {align}), paginate(text), aspect, width, height }
+ */
+export function ledMatrixText({ cols = 128, rows = 16, dot = 4, gap = 1, color = '#ff9e1b', dim = '#1a1208', bg = '#050505', weight = 'bold', minScale = 0.74, condense = 0.86, font = T.SIGN_FONT } = {}) {
+  const pitch = dot + gap; const width = cols * pitch + gap, height = rows * pitch + gap;
+  const c = T.canvas(width, height); const ctx = c.getContext('2d');
+  const SS = 4; const off = T.canvas(cols * SS, rows * SS); const octx = off.getContext('2d', { willReadFrequently: true });
+  const tex = T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping }); tex.minFilter = THREE.LinearFilter;
+  const basePx = rows * SS * 0.82;
+  function measure(text, px = basePx) { octx.font = `${weight} ${px}px ${font}`; return octx.measureText(text).width * condense / SS; }
+  function set(text, { align = 'center' } = {}) {
+    text = String(text ?? '');
+    let px = basePx; const maxW = (cols - 2) * SS;
+    octx.font = `${weight} ${px}px ${font}`; let w = octx.measureText(text).width * condense;
+    if (w > maxW) { px = Math.max(basePx * minScale, px * maxW / w); octx.font = `${weight} ${px}px ${font}`; }
+    octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, off.width, off.height); octx.fillStyle = '#fff'; octx.textBaseline = 'middle'; octx.textAlign = align;
+    octx.setTransform(condense, 0, 0, 1, align === 'center' ? off.width * (1 - condense) / 2 : 0, 0);   // condensed glyphs, like the real LED fonts
+    octx.fillText(text, align === 'center' ? off.width / 2 : SS, off.height / 2 + SS * 0.4);
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    const data = octx.getImageData(0, 0, off.width, off.height).data;
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
+    for (let r = 0; r < rows; r++) for (let x = 0; x < cols; x++) {
+      let cov = 0; for (let j = 0; j < SS; j++) for (let i = 0; i < SS; i++) cov += data[((r * SS + j) * off.width + (x * SS + i)) * 4 + 3];
+      const on = cov > 255 * SS * SS * 0.30;
+      ctx.fillStyle = on ? color : dim; const px0 = gap + x * pitch + dot / 2, py0 = gap + r * pitch + dot / 2;
+      ctx.beginPath(); ctx.arc(px0, py0, dot / 2 * (on ? 1 : 0.7), 0, Math.PI * 2); ctx.fill();
+      if (on) { ctx.fillStyle = 'rgba(255,210,140,0.45)'; ctx.beginPath(); ctx.arc(px0, py0, dot * 0.22, 0, Math.PI * 2); ctx.fill(); }
+    }
+    tex.needsUpdate = true;
+  }
+  /** Split a sentence into pages that fit the grid at full size (breaks at spaces; sentences first). */
+  function paginate(text) {
+    text = String(text ?? '').trim(); if (!text) return [''];
+    const maxW = (cols - 2) / minScale; const pages = [];   // a page may use the shrink; beyond that it is split
+    const chunks = text.split(/(?<=[.!?])\s+/);
+    for (const chunk of chunks) {
+      if (measure(chunk) <= maxW) { pages.push(chunk); continue; }
+      let cur = '';
+      for (const wd of chunk.split(/\s+/)) { const trial = cur ? cur + ' ' + wd : wd; if (measure(trial) <= maxW || !cur) cur = trial; else { pages.push(cur); cur = wd; } }
+      if (cur) pages.push(cur);
+    }
+    return pages.length ? pages : [''];
+  }
+  set('');
+  return { texture: tex, canvas: c, set, paginate, measure, width, height, aspect: width / height, cols, rows };
+}
+
+// ---------- Central London Tube map (the 723 × 265 / 750 × 200 mm card in the centre ad panel) ----------
+
+let _tubeMap = null;
+/** A schematic, deterministic 'Tube map' poster texture: coloured lines on white with interchange rings and a roundel. No real map data. */
+export function tubeMapTexture({ width = 896, height = 256 } = {}) {
+  if (_tubeMap) return _tubeMap;
+  const c = T.canvas(width, height); const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
+  // Thames (pale blue band) and the zone-1 grey
+  ctx.fillStyle = '#f0f0f0'; ctx.fillRect(width * 0.16, height * 0.12, width * 0.66, height * 0.78);
+  ctx.strokeStyle = '#a9d7f0'; ctx.lineWidth = height * 0.06; ctx.beginPath(); ctx.moveTo(width * 0.05, height * 0.66); ctx.lineTo(width * 0.30, height * 0.66); ctx.lineTo(width * 0.42, height * 0.78); ctx.lineTo(width * 0.62, height * 0.78); ctx.lineTo(width * 0.75, height * 0.62); ctx.lineTo(width * 0.95, height * 0.62); ctx.stroke();
+  const W = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = W;
+  const line = (col, pts) => { ctx.strokeStyle = col; ctx.beginPath(); pts.forEach(([x, y], i) => { const px = width * x, py = height * y; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }); ctx.stroke(); };
+  line('#e32017', [[0.06, 0.34], [0.30, 0.34], [0.44, 0.34], [0.66, 0.34], [0.94, 0.30]]);                              // Central
+  line('#00782a', [[0.06, 0.72], [0.30, 0.72], [0.50, 0.72], [0.66, 0.60], [0.94, 0.60]]);                              // District
+  line('#ffd300', [[0.30, 0.22], [0.62, 0.22], [0.66, 0.26], [0.66, 0.60], [0.50, 0.72], [0.30, 0.72], [0.26, 0.68], [0.26, 0.26], [0.30, 0.22]]);   // Circle
+  line('#000000', [[0.40, 0.06], [0.40, 0.34], [0.40, 0.72], [0.44, 0.94]]); line('#000000', [[0.52, 0.06], [0.52, 0.34], [0.55, 0.60], [0.55, 0.94]]);   // Northern (two branches)
+  line('#003688', [[0.06, 0.52], [0.30, 0.52], [0.44, 0.34], [0.52, 0.34], [0.60, 0.16], [0.94, 0.12]]);              // Piccadilly
+  line('#0098d4', [[0.20, 0.94], [0.30, 0.72], [0.36, 0.48], [0.52, 0.16], [0.94, 0.08]]);                             // Victoria
+  line('#a0a5a9', [[0.12, 0.10], [0.26, 0.26], [0.36, 0.48], [0.40, 0.72], [0.60, 0.80], [0.94, 0.72]]);              // Jubilee
+  line('#b36305', [[0.20, 0.06], [0.30, 0.34], [0.36, 0.48], [0.40, 0.72], [0.44, 0.94]]);                             // Bakerloo
+  line('#9b0056', [[0.06, 0.14], [0.30, 0.22], [0.62, 0.22]]);                                                         // Metropolitan
+  line('#6950a1', [[0.06, 0.28], [0.26, 0.26], [0.62, 0.22], [0.94, 0.20]]);                                           // Elizabeth
+  const inter = [[0.30, 0.34], [0.44, 0.34], [0.66, 0.34], [0.30, 0.72], [0.50, 0.72], [0.66, 0.60], [0.40, 0.72], [0.36, 0.48], [0.52, 0.16], [0.26, 0.26], [0.62, 0.22], [0.30, 0.22], [0.52, 0.34], [0.60, 0.80]];
+  for (const [x, y] of inter) { ctx.beginPath(); ctx.arc(width * x, height * y, W * 1.3, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#000'; ctx.stroke(); }
+  ctx.lineWidth = W;
+  const label = (t, x, y, bold = false) => { ctx.fillStyle = '#000'; ctx.font = `${bold ? 'bold' : 'normal'} ${height * 0.055}px ${T.SIGN_FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(t, width * x, height * y); };
+  label('Westminster', 0.405, 0.78, true); label('Waterloo', 0.60, 0.86); label('Green Park', 0.365, 0.43); label('Oxford Circus', 0.365, 0.29); label('Bank', 0.665, 0.29); label("King's Cross", 0.485, 0.11); label('Embankment', 0.505, 0.66); label('Baker Street', 0.20, 0.20); label('Victoria', 0.24, 0.79); label('Paddington', 0.06, 0.22); label('Liverpool St', 0.625, 0.17); label('London Bridge', 0.605, 0.75); label('Tower Hill', 0.665, 0.55);
+  // title block with a roundel
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width * 0.15, height * 0.16);
+  T.drawRoundel(ctx, width * 0.035, height * 0.085, height * 0.06, { text: 'UNDERGROUND' });
+  ctx.fillStyle = '#0019a8'; ctx.font = `bold ${height * 0.075}px ${T.SIGN_FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('Tube map', width * 0.075, height * 0.085);
+  ctx.fillStyle = '#0019a8'; ctx.fillRect(0, height - 6, width, 6);
+  ctx.fillStyle = '#444'; ctx.font = `normal ${height * 0.045}px ${T.SIGN_FONT}`; ctx.textAlign = 'right'; ctx.fillText('Central London', width * 0.98, height * 0.93);
+  const tex = T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+  _tubeMap = tex; return tex;
 }
 
 export { mergeGeometries };

@@ -18,6 +18,8 @@ import { carDoorways } from './trainSpec.js';
 import { xAt, topOf, profileStrip, profileRibbon, profileCap, boxAt, cylAt, sphereAt, planeAt, seatGeometry, bellowsGeometry, mergeGeometries } from './trainParts.js';
 
 const SEAT_PITCH = 0.47, SEAT_W = 0.44, SCREEN_DEPTH = 0.56, POLE_R = 0.019;
+/** Width:height of the in-car LED matrices (trainParts.ledMatrixText with 128 × 16 cells). */
+export const LED_ASPECT = 8;
 
 /** Angle (radians) of the profile from vertical at height y; positive = leaning towards the centreline going up. */
 export function leanAt(profile, y) {
@@ -53,7 +55,7 @@ export function carLayout(spec, carIndex) {
   const cabZ = isDM ? b0 + spec.cabDepth : null; const endWall = isS7 ? 0.06 : 0.14;
   const saloonMin = isDM ? cabZ : b0 + endWall, saloonMax = b1 - endWall;
   const edges = [saloonMin]; for (const d of doorways) edges.push(d.zMin, d.zMax); edges.push(saloonMax);
-  const bays = []; const seats = [], poles = [], screens = [], displays = [], panels = [], decals = [], rails = [];
+  const bays = []; const seats = [], poles = [], screens = [], displays = [], panels = [], decals = [], rails = []; const mapDone = { '-1': false, '1': false };
   const wheelchairCar = isS7 && (spec.wheelchairCars || []).includes(carIndex);
   for (let i = 0; i < edges.length - 1; i += 2) {
     const zMin = edges[i], zMax = edges[i + 1]; const L = zMax - zMin; if (L < 0.5) continue;
@@ -86,10 +88,13 @@ export function carLayout(spec, carIndex) {
         decals.push({ name: 'wheelchair', y: spec.windowBottom + 0.40, z: (zMin + zMax) / 2, side, w: 0.13, h: 0.15, onGlass: true });
       }
       bays.push(bay);
-      // line diagram (1295 × 138 / 1470 × 200 mm) or a card advert above the windows of this bay
-      if (L >= 2.2) panels.push({ kind: 'diagram', z: (zMin + zMax) / 2, side, w: isS7 ? 1.47 : 1.295, h: isS7 ? 0.20 : 0.138 });
-      else panels.push({ kind: 'poster', z: (zMin + zMax) / 2, side, w: 0.72, h: 0.26 });
-      if (L >= 4.0) { panels.push({ kind: 'poster', z: zMin + 0.6, side, w: 0.72, h: 0.26 }); panels.push({ kind: 'poster', z: zMax - 0.6, side, w: 0.72, h: 0.26 }); }
+      // above the windows: the car line diagram (1295 × 138 / 1470 × 200 mm), the Central London Tube map (723 × 265 / 750 × 200 mm)
+      // on one bay per side, and card adverts (the S7 bays are 3.4 m: diagram + one card; the 1996 bays are 4.1 m: diagram + two cards)
+      const dw = isS7 ? 1.47 : 1.295, dh = isS7 ? 0.20 : 0.138; const cw = 0.72, ch = 0.26; const mw = isS7 ? 0.75 : 0.723, mh = isS7 ? 0.20 : 0.22;
+      const card = (z, allowMap) => { const mapHere = allowMap && !mapDone[side]; if (mapHere) mapDone[side] = true; panels.push({ kind: mapHere ? 'map' : 'poster', z, side, w: mapHere ? mw : cw, h: mapHere ? mh : ch }); };
+      if (L >= 3.2) { const near = zMin < 0; panels.push({ kind: 'diagram', z: near ? zMin + 0.15 + dw / 2 : zMax - 0.15 - dw / 2, side, w: dw, h: dh }); card(near ? zMax - 0.15 - cw / 2 : zMin + 0.15 + cw / 2, true); if (L >= 4.0) panels.push({ kind: 'poster', z: (zMin + zMax) / 2 + (near ? 0.4 : -0.4), side, w: cw, h: ch }); }
+      else if (L >= 2.2) panels.push({ kind: 'diagram', z: (zMin + zMax) / 2, side, w: dw, h: dh });
+      else if (L >= 1.0) card((zMin + zMax) / 2, false);
     }
   }
   // draught screens + vertical poles at every doorway edge, both sides
@@ -111,13 +116,13 @@ export function carLayout(spec, carIndex) {
   if (!isS7) {
     for (const [zw, dir] of [[saloonMax + 0.10, -1], [isDM ? cabZ : saloonMin - 0.10, 1]]) {
       const m = new THREE.Matrix4().makeTranslation(0, dispY, zw + dir * 0.046).multiply(new THREE.Matrix4().makeRotationY(dir > 0 ? 0 : Math.PI));
-      displays.push({ m, w: 0.72, h: 0.10, housing: { x: 0, y: dispY, z: zw + dir * 0.02, w: 0.80, h: 0.16, d: 0.05 } });
+      displays.push({ m, w: 0.72, h: 0.72 / LED_ASPECT, housing: { x: 0, y: dispY, z: zw + dir * 0.02, w: 0.80, h: 0.16, d: 0.05 } });
     }
   } else {
     const zs = isDM ? [(cabZ + doorways[0].zMin) / 2 + 0.2, (doorways[1].zMax + doorways[2].zMin) / 2] : [(doorways[0].zMax + doorways[1].zMin) / 2, (doorways[1].zMax + doorways[2].zMin) / 2];
     for (const z of zs) {
-      displays.push({ m: new THREE.Matrix4().makeTranslation(0, dispY, z + 0.041), w: 0.9, h: 0.11, housing: { x: 0, y: dispY, z, w: 1.0, h: 0.19, d: 0.08, hang: true } });
-      displays.push({ m: new THREE.Matrix4().makeTranslation(0, dispY, z - 0.041).multiply(new THREE.Matrix4().makeRotationY(Math.PI)), w: 0.9, h: 0.11 });
+      displays.push({ m: new THREE.Matrix4().makeTranslation(0, dispY, z + 0.041), w: 0.9, h: 0.9 / LED_ASPECT, housing: { x: 0, y: dispY, z, w: 1.0, h: 0.19, d: 0.08, hang: true } });
+      displays.push({ m: new THREE.Matrix4().makeTranslation(0, dispY, z - 0.041).multiply(new THREE.Matrix4().makeRotationY(Math.PI)), w: 0.9, h: 0.9 / LED_ASPECT });
     }
   }
   // priority-seat stickers (100 × 140 mm) on the glass above the priority seats
@@ -126,7 +131,7 @@ export function carLayout(spec, carIndex) {
   // 3–4 sittable seats per car, spread along it
   const longSeats = seats.filter(s => s.kind === 'long'); const n = longSeats.length; const picks = Math.min(4, n);
   for (let k = 0; k < picks; k++) longSeats[Math.floor(n * (k + 0.5) / picks)].interactive = true;
-  return { carIndex, len, half, b0, b1, isDM, flip, floorY, ceilY, halfInt, doorways, doorTop, cabZ, saloonMin, saloonMax, bays, seats, poles, screens, displays, panels, decals, rails, isS7 };
+  return { carIndex, len, half, b0, b1, isDM, flip, floorY, ceilY, halfInt, doorways, doorTop, cabZ, saloonMin, saloonMax, bays, seats, poles, screens, displays, panels, decals, rails, isS7, wheelchairCar };
 }
 
 /** Build all interior geometry of a car into the collector (keys = material names in trainParts.trainMaterials). */
@@ -142,7 +147,7 @@ export function buildInterior(spec, lay, col, atlas) {
       else col.add('dark', boxAt(halfInt - 0.62, 0.004, d.width + 0.9, side * (halfInt - (halfInt - 0.62) / 2), floorY + 0.002, d.z));   // black vestibule floor
     }
   }
-  // ---- side lining in bands, both sides, outside doorways (pockets are lining too)
+  // ---- side lining in bands, both sides, outside doorways (the leaves hang outside the skin, so the lining runs right up to the door reveals)
   const zSpans = spansOutsideDoors(lay);
   for (const side of [-1, 1]) {
     for (const [z0, z1] of zSpans) {

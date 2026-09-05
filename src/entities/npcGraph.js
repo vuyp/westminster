@@ -71,7 +71,8 @@ export function buildDefaultGraph() {
   const bus = [[-26, 3.6], [-23.5, 3.9], [-21.5, 3.5], [-28, 3.8]].map(([x, z]) => N(x, S, z, ['street', 'busStop'], 'street'));
   bus.forEach(b => { G.link(b, north[xsN.indexOf(-27)]); G.link(b, north[xsN.indexOf(-20)]); });
   // Big Ben photo spots: the south pavement at the foot of the tower, the entrance pavement opposite, and the Boadicea corner
-  const photo = [[30, 25.3], [36, 25.6], [42, 25.2], [50, 25.5], [56, 25.6], [26, 25.8], [8, 3.6], [14, 3.9], [3, 3.8], [72, -1], [76, -7]].map(([x, z]) => N(x, S, z, ['street', 'photo'], 'street'));
+  // … and the riverside by Exits 1 & 2 (76 m from the tower at bearing 229°: the full tower above the bridge corner)
+  const photo = [[30, 25.3], [36, 25.6], [42, 25.2], [50, 25.5], [56, 25.6], [26, 25.8], [8, 3.6], [14, 3.9], [3, 3.8], [72, -1], [76, -7], [79.5, -12.5], [78, -19.5], [76.5, -22]].map(([x, z]) => N(x, S, z, ['street', 'photo', x > 70 && z < -10 ? 'photoExit1' : 'photoOther'], 'street'));
   photo.forEach(p => { const n = G.nodes[p]; const near = G.nearest(n.x, S, n.z, { maxDist: 12, filter: m => (m.tags.has('pavementS') || m.tags.has('pavementN') || m.tags.has('riverside')) && m.id !== p }); if (near >= 0) G.link(p, near); });
 
   // ======================================================================= EXIT 4: the Bridge Street entrance

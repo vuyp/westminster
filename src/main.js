@@ -45,7 +45,7 @@ async function boot() {
   const audio = new AudioEngine({ hud });
   const collision = new Collision();
   const ctx = createContext({ scene: engine.scene, collision, audio, hud, quality });
-  ctx.camera = engine.camera; ctx.renderer = engine.renderer; ctx.engine = engine;
+  ctx.camera = engine.camera; ctx.renderer = engine.renderer; ctx.engine = engine; ctx.params = params;
   const player = new Player({ camera: engine.camera, collision, audio, hud, ctx, domElement: canvas, noLock: autostart });
   ctx.player = player;
   Object.assign(app, { engine, scene: engine.scene, camera: engine.camera, hud, audio, collision, ctx, player });

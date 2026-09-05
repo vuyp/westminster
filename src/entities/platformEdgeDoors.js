@@ -127,7 +127,7 @@ export function createPlatformEdgeDoors(ctx, opts) {
     g2.fillStyle = '#0a0a0a'; g2.fillRect(0, 0, c.width, c.height); g2.fillStyle = '#fff'; g2.font = `bold 40px ${T.SIGN_FONT}`; g2.textAlign = 'center'; g2.textBaseline = 'middle';
     doors.forEach((d, i) => { const cx = (i % cols) * cw + cw / 2, cy = Math.floor(i / cols) * ch + ch / 2; g2.fillText(`${labelPrefix} ${i + 1}`, cx, cy + 2); });
     const tex = T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping }); const labMat = M.signMaterial(tex, { emissive: 0.5 });
-    const geos = doors.map((d, i) => { const g = new THREE.PlaneGeometry(0.16, 0.08); const uv = g.attributes.uv; const u0 = (i % cols) / cols, u1 = u0 + 1 / cols, v1 = 1 - Math.floor(i / cols) / rows, v0 = v1 - 1 / rows; for (let k = 0; k < uv.count; k++) uv.setXY(k, u0 + uv.getX(k) * (u1 - u0), v0 + uv.getY(k) * (v1 - v0)); g.rotateY(Math.PI); g.translate(d.x + d.clear / 2 + 0.02, y + HEADER_TOP - 0.09, zLine - 0.182); return g; });
+    const geos = doors.map((d, i) => { const g = new THREE.PlaneGeometry(0.16, 0.08); const uv = g.attributes.uv; const u0 = (i % cols) / cols, u1 = u0 + 1 / cols, v1 = 1 - Math.floor(i / cols) / rows, v0 = v1 - 1 / rows; for (let k = 0; k < uv.count; k++) uv.setXY(k, u0 + uv.getX(k) * (u1 - u0), v0 + uv.getY(k) * (v1 - v0)); g.rotateY(Math.PI); g.translate(d.x + d.clear / 2 + 0.02, y + HEADER_TOP - 0.09, zLine - 0.232); return g; });   // proud of the drive housings
     const merged = mergeGeometries(geos, false); if (merged) group.add(new THREE.Mesh(merged, labMat));
   } catch (e) { console.warn('[peds] labels failed', e); }
   // manifestation band on the fixed glass (row of grey dots at 1.4 m) — one merged mesh with a small tiling texture
@@ -200,7 +200,8 @@ export function createPlatformEdgeDoors(ctx, opts) {
   function placeLeaves(t) {
     for (const li of leafInstances) {
       const s = li.side === 'right' ? 1 : -1;
-      li.list.forEach((d, i) => { const off = s * (d.clear / 2) * t; tmpM.makeTranslation(d.x + off, y + GLASS_BOTTOM, zLine); for (const m of li.meshes) m.setMatrixAt(i, tmpM); });
+      // leaves run on the TRACK side of the fixed glazing (they slide behind the fixed panels when open), so offset them in z
+      li.list.forEach((d, i) => { const off = s * (d.clear / 2) * t; tmpM.makeTranslation(d.x + off, y + GLASS_BOTTOM, zLine + 0.045); for (const m of li.meshes) m.setMatrixAt(i, tmpM); });
       for (const m of li.meshes) { m.instanceMatrix.needsUpdate = true; }
     }
   }
