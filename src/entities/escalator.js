@@ -85,9 +85,10 @@ export function createEscalator(ctx, opts) {
     }
 
     // ---- balustrades (both sides): sloping stainless panels following the profile + the skirt + the handrail + lighting
+    const balLanding = Math.min(landing, 1.0);   // balustrades/newels reach 1 m past the comb; the landing plate beyond is open on both sides
     for (const side of [-1, 1]) {
       const x = side * (width / 2 + 0.03);
-      const pts = profilePoints(plan, rise, landing);
+      const pts = profilePoints(plan, rise, balLanding);
       // skirt (vertical panel next to the steps), 0.35 m high, follows profile
       laneGroup.add(ribbonMesh(pts, x, 0.0, 0.34, skirtMat, side));
       // balustrade panel from skirt top to handrail underside
@@ -109,7 +110,7 @@ export function createEscalator(ctx, opts) {
       // collision: the balustrade is a wall along the run (approximate with a chain of boxes)
       const segs = 6;
       for (let k = 0; k < segs; k++) {
-        const za = -landing + (plan + 2 * landing) * k / segs, zb = -landing + (plan + 2 * landing) * (k + 1) / segs;
+        const za = -balLanding + (plan + 2 * balLanding) * k / segs, zb = -balLanding + (plan + 2 * balLanding) * (k + 1) / segs;
         const ya = profileY(za, plan, rise), yb = profileY(zb, plan, rise);
         const pa = laneGroup.localToWorld(new THREE.Vector3(x, Math.min(ya, yb) - 0.2, za)), pb = laneGroup.localToWorld(new THREE.Vector3(x + side * 0.3, Math.max(ya, yb) + 1.4, zb));
         collision.addBlocker({ xMin: Math.min(pa.x, pb.x) - 0.05, xMax: Math.max(pa.x, pb.x) + 0.05, yMin: pa.y, yMax: pb.y, zMin: Math.min(pa.z, pb.z) - 0.05, zMax: Math.max(pa.z, pb.z) + 0.05 }, name + ':balustrade');

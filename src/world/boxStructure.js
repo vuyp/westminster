@@ -61,15 +61,16 @@ export function buildStructure(ctx, parent, K, plan) {
   // ---- 1. wall faces (diaphragm concrete) with openings --------------------------------------------------------------
   const wallFaces = [];
   // north face z = zMin (facing +z/south), full; south face with the passages and the west-section arcade; end walls with the cutting / alcove
-  wallFaces.push(xyQuad(nFace, BOX.xMin, BOX.xMax, Y0, Y1, 'south'));
+  wallFaces.push(verticalPoly('xy', nFace, [BOX.xMin, Y0, BOX.xMax, Y1], plan.dcHoleN ? [[plan.dcHoleN.xMin, plan.dcHoleN.yMin, plan.dcHoleN.xMax, plan.dcHoleN.yMax]] : [], 'south'));   // pierced at District level where Platform 2 crosses
   {
     const holes = [];
     for (const p of plan.passages) for (const y of p.levels) holes.push([p.x - p.width / 2, y - 0.05, p.x + p.width / 2, y + 3.0]);
     if (plan.arcade) holes.push([plan.arcade.xMin, plan.arcade.yMin, plan.arcade.xMax, plan.arcade.yMax]);
+    if (plan.dcHoleS) holes.push([plan.dcHoleS.xMin, plan.dcHoleS.yMin, plan.dcHoleS.xMax, plan.dcHoleS.yMax]);   // pierced at District level where Platform 1 crosses
     wallFaces.push(verticalPoly('xy', sFace, [BOX.xMin, Y0, BOX.xMax, Y1], holes, 'north'));
   }
   wallFaces.push(verticalPoly('zy', BOX.xMax, [BOX.zMin, Y0, BOX.zMax, Y1], plan.cutting ? [[plan.cutting.zMin, plan.cutting.yMin, plan.cutting.zMax, plan.cutting.yMax]] : [], 'west'));
-  wallFaces.push(verticalPoly('zy', BOX.xMin, [BOX.zMin, Y0, BOX.zMax, Y1], plan.alcove ? [[plan.alcove.zMin, plan.alcove.yMin, plan.alcove.zMax, plan.alcove.yMax]] : [], 'east'));
+  wallFaces.push(verticalPoly('zy', BOX.xMin, [BOX.zMin, Y0, BOX.zMax, Y1], [...(plan.alcove ? [[plan.alcove.zMin, plan.alcove.yMin, plan.alcove.zMax, plan.alcove.yMax]] : []), ...(plan.dcHoleW ? [[plan.dcHoleW.zMin, plan.dcHoleW.yMin, plan.dcHoleW.zMax, plan.dcHoleW.yMax]] : [])], 'east'));
   for (const w of wallFaces) B.add(w, mats.diaphragm);
   // passage reveals (jambs + soffit) through the 1.2 m wall, in the smooth concrete
   for (const p of plan.passages) for (const y of p.levels) { const x0 = p.x - p.width / 2, x1 = p.x + p.width / 2; B.add(yzQuad(x0, y - 0.05, y + 3.0, sFace - 0.05, sFace + BOX.wallThickness, 'east'), mats.grillage); B.add(yzQuad(x1, y - 0.05, y + 3.0, sFace - 0.05, sFace + BOX.wallThickness, 'west'), mats.grillage); B.add(xzQuad(y + 3.0, x0, x1, sFace - 0.05, sFace + BOX.wallThickness, 'down'), mats.grillage); }
@@ -79,10 +80,21 @@ export function buildStructure(ctx, parent, K, plan) {
   if (plan.alcove) { const a = plan.alcove; B.add(yzQuad(a.xMin, a.yMin, a.yMax, a.zMin, a.zMax, 'east'), mats.diaphragm); B.add(xyQuad(a.zMin, a.xMin, BOX.xMin + 0.05, a.yMin, a.yMax, 'south'), mats.grillage); B.add(xyQuad(a.zMax, a.xMin, BOX.xMin + 0.05, a.yMin, a.yMax, 'north'), mats.grillage); B.add(xzQuad(a.yMax, a.xMin, BOX.xMin + 0.05, a.zMin, a.zMax, 'down'), mats.precast); }
 
   // ---- 2. grillage: buttresses (primary column lines), ribs (secondary lines), walings ---------------------------------
-  const butt = (x, w, d, side) => { const z0 = side < 0 ? nFace : sFace - d, z1 = side < 0 ? nFace + d : sFace; return boxGeo(T, w, Y1 - Y0, d, { x, y: (Y0 + Y1) / 2, z: (z0 + z1) / 2 }); };
+  // Where the District & Circle platforms cross the box (plan.dcHoleN on the north wall, plan.dcHoleS on the south), the grillage is
+  // interrupted through the platform band: buttresses are split above/below it and walings in the band are omitted.
+  const cutFor = (side) => (side < 0 ? plan.dcHoleN : plan.dcHoleS) || null;
+  const inCutX = (cut, x, w) => cut && x + w / 2 > cut.xMin && x - w / 2 < cut.xMax;
+  const butt = (x, w, d, side) => {
+    const z0 = side < 0 ? nFace : sFace - d, z1 = side < 0 ? nFace + d : sFace; const zc = (z0 + z1) / 2; const cut = cutFor(side);
+    if (!inCutX(cut, x, w)) return [boxGeo(T, w, Y1 - Y0, d, { x, y: (Y0 + Y1) / 2, z: zc })];
+    const parts = [];
+    if (cut.yMin > Y0 + 0.1) parts.push(boxGeo(T, w, cut.yMin - Y0, d, { x, y: (Y0 + cut.yMin) / 2, z: zc }));
+    if (cut.yMax < Y1 - 0.1) parts.push(boxGeo(T, w, Y1 - cut.yMax, d, { x, y: (cut.yMax + Y1) / 2, z: zc }));
+    return parts;
+  };
   for (const side of [-1, 1]) {
-    for (const x of primaryX) B.add(butt(x, GRILLAGE.buttressW, GRILLAGE.buttressD, side), mats.grillage);
-    for (const x of ribX) B.add(butt(x, GRILLAGE.ribW, GRILLAGE.ribD, side), mats.grillage);
+    for (const x of primaryX) for (const g of butt(x, GRILLAGE.buttressW, GRILLAGE.buttressD, side)) B.add(g, mats.grillage);
+    for (const x of ribX) for (const g of butt(x, GRILLAGE.ribW, GRILLAGE.ribD, side)) B.add(g, mats.grillage);
     // walings between the verticals at each strut level (+ a top waling under the lid), skipped where a slab sits within head height
     const verts = [...primaryX.map(x => ({ x, w: GRILLAGE.buttressW })), ...ribX.map(x => ({ x, w: GRILLAGE.ribW }))].sort((a, b) => a.x - b.x);
     const walingLevels = [...levels, Y1 - 3.2];
@@ -91,10 +103,11 @@ export function buildStructure(ctx, parent, K, plan) {
       const zc = side < 0 ? nFace + GRILLAGE.walingD / 2 : sFace - GRILLAGE.walingD / 2;
       const s = slabAt(xm, zc + side * -1.2, L + 0.5); if (s != null && L - s < slabHeadroom && L - s > -0.9) continue;    // would be a ledge at head height
       if (plan.arcade && side > 0 && xm > plan.arcade.xMin && xm < plan.arcade.xMax && L > plan.arcade.yMin - 1 && L < plan.arcade.yMax + 0.5) continue;
+      { const cut = cutFor(side); if (cut && xm > cut.xMin - 1 && xm < cut.xMax + 1 && L > cut.yMin - GRILLAGE.walingH && L < cut.yMax + GRILLAGE.walingH) continue; }   // platform band
       B.add(boxGeo(T, x1 - x0 + 0.02, GRILLAGE.walingH, GRILLAGE.walingD, { x: xm, y: L, z: zc }), mats.grillage);
     }
     // corner returns at the end walls: a slimmer pilaster
-    for (const x of [BOX.xMin + 0.5, BOX.xMax - 0.5]) B.add(butt(x, 1.0, GRILLAGE.ribD, side), mats.grillage);
+    for (const x of [BOX.xMin + 0.5, BOX.xMax - 0.5]) for (const g of butt(x, 1.0, GRILLAGE.ribD, side)) B.add(g, mats.grillage);
   }
   // end-wall pilasters (the underpinning beams of Portcullis House's end walls come down as flat ribs), clear of the cutting / alcove
   for (const x of [BOX.xMin, BOX.xMax]) for (const z of [BOX.zMin + 6.5, colZ, BOX.zMax - 6.5]) {

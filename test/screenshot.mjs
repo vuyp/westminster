@@ -21,7 +21,7 @@ else views.push({ name: 'shot', pos: opt.pos || '0,1.7,5', look: opt.look || '0,
 const outdir = opt.outdir || path.dirname(opt.out || 'shot.png'); fs.mkdirSync(outdir, { recursive: true });
 try {
   if (opt.full) {
-    const q = new URLSearchParams({ autostart: '1', mute: '1' }); if (opt.pos) q.set('pos', opt.pos); if (opt.yaw) q.set('yaw', opt.yaw); if (opt.pitch) q.set('pitch', opt.pitch); if (opt.skip) q.set('skip', opt.skip); if (opt.only) q.set('only', opt.only); if (opt.quality) q.set('quality', opt.quality); if (opt.time) q.set('time', opt.time);
+    const q = new URLSearchParams({ autostart: '1', mute: '1' }); if (opt.pos) q.set('pos', opt.pos); if (opt.yaw) q.set('yaw', opt.yaw); if (opt.pitch) q.set('pitch', opt.pitch); if (opt.skip) q.set('skip', opt.skip); if (opt.only) q.set('only', opt.only); if (opt.quality) q.set('quality', opt.quality); if (opt.time) q.set('time', opt.time); if (opt.showBlockers) q.set('showBlockers', '1'); if (opt.showFloors) q.set('showFloors', '1');
     await page.goto(`http://127.0.0.1:${port}/index.html?${q}`);
     await page.waitForFunction(() => window.__app && window.__app.ready, null, { timeout: 180000 });
     await page.waitForTimeout(wait);

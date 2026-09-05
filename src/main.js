@@ -3,6 +3,7 @@
 // URL params: ?autostart=1 (skip start screen, no pointer lock — used by tests)
 //             ?pos=x,y,z&yaw=deg&pitch=deg   ?quality=low|high   ?mute=1
 //             ?skip=street,npcs   ?only=ticketHall   ?time=HH:MM   ?dev=dev/trainServiceTest (extra modules under src/, comma-separated)
+//             ?showBlockers=1 / ?showFloors=1  draw the collision boxes (red) and walkable floors (green) — debugging aid
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { createEngine } from './core/engine.js';
@@ -76,6 +77,10 @@ async function boot() {
   await loadList(WORLD_MODULES, 'world');
   await loadList(SYSTEM_MODULES, 'system');
   if (params.get('dev')) await loadList(params.get('dev').split(',').map(m => [m, `./${m}.js`]), 'dev');
+
+  // debug overlays: collision blockers (red) and floors (green)
+  if (params.get('showBlockers') === '1') { const mat = new THREE.MeshBasicMaterial({ color: 0xff4444, wireframe: true, depthTest: false, transparent: true, opacity: 0.6 }); for (const b of collision.blockers) { const sz = b.getSize(new THREE.Vector3()); const c = b.getCenter(new THREE.Vector3()); const m = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), mat); m.position.copy(c); m.renderOrder = 999; engine.scene.add(m); } }
+  if (params.get('showFloors') === '1') { const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true, depthTest: false, transparent: true, opacity: 0.6 }); for (const f of collision.floors) { if (f.kind === 'flat') { const m = new THREE.Mesh(new THREE.BoxGeometry(f.xMax - f.xMin, 0.05, f.zMax - f.zMin), mat); m.position.set((f.xMin + f.xMax) / 2, f.y, (f.zMin + f.zMax) / 2); m.renderOrder = 999; engine.scene.add(m); } else { const m = new THREE.Mesh(new THREE.BoxGeometry(f.halfWidth * 2, 0.05, f.len), mat); m.position.set((f.ax + f.bx) / 2, (f.ya + f.yb) / 2, (f.az + f.bz) / 2); m.rotation.y = Math.atan2(f.dx, f.dz); m.rotation.x = -Math.atan2(f.yb - f.ya, f.len); m.renderOrder = 999; engine.scene.add(m); } } }
 
   // fallback lighting if nothing created a sun / ambient (e.g. street module skipped)
   let hasLight = false; engine.scene.traverse(o => { if (o.isLight) hasLight = true; });

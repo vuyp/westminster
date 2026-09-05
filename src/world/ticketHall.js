@@ -78,6 +78,18 @@ export function build(ctx) {
   const LIFT_ST = TH.streetLift;
   const GL = TH.gateline;
   const openings = DISTRICT.stairOpeningsWorld; const open2 = openings.find(o => o.platform === 2), open1 = openings.find(o => o.platform === 1);
+  // ---- seal the concourse floor around the diagonal District stair openings (the holes are axis-aligned AABBs of rotated stairs)
+  try {
+    const H = LEVELS.concourse;
+    const seal = (s0, s1, t0, t1) => { const sm = (s0 + s1) / 2; const a = dcToWorld(sm, t0), b = dcToWorld(sm, t1); ctx.collision.addRamp({ x: a.x, y: H, z: a.z }, { x: b.x, y: H, z: b.z }, Math.abs(s1 - s0), { tag: 'stairSeal', sound: 'hard' }); };
+    for (const st of DISTRICT.stairs) {
+      seal(st.sTop - 3.5, st.sTop + 0.03, st.tMin, st.tMax);            // approach landing at the head
+      seal(st.sTop - 3.5, st.sBottom + 3.5, st.tMin - 4, st.tMin);       // band beside the flight
+      seal(st.sTop - 3.5, st.sBottom + 3.5, st.tMax, st.tMax + 4);       // band beside the flight
+      seal(st.sBottom - 0.03, st.sBottom + 3.5, st.tMin, st.tMax);       // beyond the foot (guarded at concourse level)
+    }
+  } catch (e) { console.warn('[ticketHall] stair seals failed', e); }
+
   const st2 = DISTRICT.stairs.find(s => s.platform === 2), st1 = DISTRICT.stairs.find(s => s.platform === 1);
   const lift2 = DISTRICT.lifts.find(l => l.platform === 2), lift1 = DISTRICT.lifts.find(l => l.platform === 1);
   const L2 = dcToWorld(lift2.s, lift2.t), L1 = dcToWorld(lift1.s, lift1.t);
@@ -578,3 +590,4 @@ export function build(ctx) {
   ctx.register('ticketHall', api);
   return api;
 }
+

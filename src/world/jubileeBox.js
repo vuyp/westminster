@@ -93,6 +93,9 @@ export function build(ctx) {
     banks: [...frames, ...stairFrames],
     passages: JUBILEE.passages.map(p => ({ x: p.x, width: p.width, levels: [LEVELS.jubUpper, LEVELS.jubLower] })),
     cutting, alcove,
+    dcHoleW: { zMin: -10, zMax: BOX.zMax, yMin: LEVELS.dcRail - 0.3, yMax: LEVELS.dcCeiling + 0.4 },
+    dcHoleN: { xMin: -2, xMax: 39, yMin: LEVELS.dcRail - 0.3, yMax: LEVELS.dcCeiling + 0.4 },     // District structure crosses the north wall over x -1..38
+    dcHoleS: { xMin: BOX.xMin + 0.5, xMax: -6.5, yMin: LEVELS.dcRail - 0.3, yMax: LEVELS.dcCeiling + 0.4 },   // ... and the south wall over x -40..-7   // District Platform 2 / its recess and stair cross the west wall at platform level
     arcade: { xMin: IW.xMin + 1.5, xMax: IW.xMax - 1.5, yMin: IW.y - 0.05, yMax: UNDERCROFT_Y },
     undercroft: { y: UNDERCROFT_Y, rect: K.R(IW.xMin, IW.xMax, IW.zMin, IW.zMax), holes: [...(fc ? [soffitHole(fc)] : []), ...(fd ? [soffitHole(fd)] : []), K.rectPoly(liftRect), K.rectPoly(stairRect)], ext: { xMin: IW.xMin, xMax: IW.xMax, zMin: BOX.zMax, zMax: IW.zMax, yMin: IW.y - SLAB_T } },
     lidHoles: [...(fa ? [boundsOf(fa.poly(-0.2, fa.plan, fa.laneMin - 0.9, fa.laneMax + 0.9))].map(r => K.R(Math.max(BOX.xMin, r.xMin), Math.min(BOX.xMax, r.xMax), r.zMin, r.zMax)) : []), stairRect],
@@ -140,15 +143,24 @@ export function build(ctx) {
     collision.addFloor({ ...plan.baseSpur, y: BOX.floor + 0.23, tag: 'box:baseSpur', sound: 'metal' });
     // box walls (thick blockers), grillage verticals, columns, cutting / alcove / extension walls
     const wallT = BOX.wallThickness;
-    collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: BOX.top + 2, zMin: BOX.zMin - wallT, zMax: BOX.zMin }, 'box:wallN');
-    for (const [x0, x1] of splitWall(BOX.xMin, BOX.xMax)) collision.addBlocker({ xMin: x0, xMax: x1, yMin: BOX.floor - 1, yMax: BOX.top + 2, zMin: BOX.zMax, zMax: BOX.zMax + wallT }, 'box:wallS');
+    collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: BOX.top - 0.05, zMin: BOX.zMin - wallT, zMax: BOX.zMin }, 'box:wallN');
+    for (const [x0, x1] of splitWall(BOX.xMin, BOX.xMax)) collision.addBlocker({ xMin: x0, xMax: x1, yMin: BOX.floor - 1, yMax: BOX.top - 0.05, zMin: BOX.zMax, zMax: BOX.zMax + wallT }, 'box:wallS');
     collision.addBlocker({ xMin: IW.xMin + 1.5, xMax: IW.xMax - 1.5, yMin: BOX.floor - 1, yMax: IW.y - 0.05, zMin: BOX.zMax, zMax: BOX.zMax + wallT }, 'box:wallS');
-    collision.addBlocker({ xMin: IW.xMin + 1.5, xMax: IW.xMax - 1.5, yMin: UNDERCROFT_Y, yMax: BOX.top + 2, zMin: BOX.zMax, zMax: BOX.zMax + wallT }, 'box:wallS');
+    collision.addBlocker({ xMin: IW.xMin + 1.5, xMax: IW.xMax - 1.5, yMin: UNDERCROFT_Y, yMax: BOX.top - 0.05, zMin: BOX.zMax, zMax: BOX.zMax + wallT }, 'box:wallS');
     for (const y of [LEVELS.jubUpper, LEVELS.jubLower]) for (const p of JUBILEE.passages) { collision.addBlocker({ xMin: p.x - p.width / 2, xMax: p.x + p.width / 2, yMin: y + 3.0, yMax: y + 6, zMin: BOX.zMax - 0.1, zMax: BOX.zMax + wallT }, 'box:passageLintel'); collision.addBlocker({ xMin: p.x - p.width / 2, xMax: p.x + p.width / 2, yMin: BOX.floor - 1, yMax: y - 0.05, zMin: BOX.zMax - 0.1, zMax: BOX.zMax + wallT }, 'box:passageSill'); }
-    collision.addBlocker({ xMin: BOX.xMax, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: BOX.top + 2, zMin: BOX.zMin, zMax: cutting ? cutting.zMin : BOX.zMax }, 'box:wallE');
-    if (cutting) { collision.addBlocker({ xMin: BOX.xMax, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: cutting.yMin - 0.01, zMin: cutting.zMin, zMax: cutting.zMax }, 'box:wallE'); collision.addBlocker({ xMin: BOX.xMax, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: BOX.top + 2, zMin: cutting.zMax, zMax: BOX.zMax }, 'box:wallE'); for (const [za, zb] of [[cutting.zMin - 0.4, cutting.zMin], [cutting.zMax, cutting.zMax + 0.4]]) collision.addBlocker({ xMin: BOX.xMax, xMax: cutting.xMax + 0.4, yMin: cutting.yMin, yMax: cutting.yMax + 1, zMin: za, zMax: zb }, 'box:cuttingWall'); collision.addBlocker({ xMin: cutting.xMax, xMax: cutting.xMax + 0.4, yMin: cutting.yMin, yMax: cutting.yMax - 1.2, zMin: cutting.zMin, zMax: cutting.zMax }, 'box:cuttingEnd'); }
-    collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: BOX.floor - 1, yMax: BOX.top + 2, zMin: BOX.zMin, zMax: alcove ? alcove.zMin : BOX.zMax }, 'box:wallW');
-    if (alcove) { collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: BOX.floor - 1, yMax: alcove.yMin - 0.01, zMin: alcove.zMin, zMax: alcove.zMax }, 'box:wallW'); collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: alcove.yMax, yMax: BOX.top + 2, zMin: alcove.zMin, zMax: alcove.zMax }, 'box:wallW'); collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: BOX.floor - 1, yMax: BOX.top + 2, zMin: alcove.zMax, zMax: BOX.zMax }, 'box:wallW'); collision.addBlocker({ xMin: alcove.xMin - 0.4, xMax: alcove.xMin, yMin: alcove.yMin, yMax: alcove.yMax, zMin: alcove.zMin, zMax: alcove.zMax }, 'box:alcoveBack'); for (const [za, zb] of [[alcove.zMin - 0.4, alcove.zMin], [alcove.zMax, alcove.zMax + 0.4]]) collision.addBlocker({ xMin: alcove.xMin - 0.4, xMax: BOX.xMin, yMin: alcove.yMin, yMax: alcove.yMax, zMin: za, zMax: zb }, 'box:alcoveWall'); }
+    collision.addBlocker({ xMin: BOX.xMax, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: BOX.top - 0.05, zMin: BOX.zMin, zMax: cutting ? cutting.zMin : BOX.zMax }, 'box:wallE');
+    if (cutting) { collision.addBlocker({ xMin: BOX.xMax, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: cutting.yMin - 0.01, zMin: cutting.zMin, zMax: cutting.zMax }, 'box:wallE'); collision.addBlocker({ xMin: BOX.xMax, xMax: BOX.xMax + wallT, yMin: BOX.floor - 1, yMax: BOX.top - 0.05, zMin: cutting.zMax, zMax: BOX.zMax }, 'box:wallE'); for (const [za, zb] of [[cutting.zMin - 0.4, cutting.zMin], [cutting.zMax, cutting.zMax + 0.4]]) collision.addBlocker({ xMin: BOX.xMax, xMax: cutting.xMax + 0.4, yMin: cutting.yMin, yMax: cutting.yMax + 1, zMin: za, zMax: zb }, 'box:cuttingWall'); collision.addBlocker({ xMin: cutting.xMax, xMax: cutting.xMax + 0.4, yMin: cutting.yMin, yMax: cutting.yMax - 1.2, zMin: cutting.zMin, zMax: cutting.zMax }, 'box:cuttingEnd'); }
+    collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: BOX.floor - 1, yMax: BOX.top - 0.05, zMin: BOX.zMin, zMax: alcove ? alcove.zMin : BOX.zMax }, 'box:wallW');
+    if (alcove) { collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: BOX.floor - 1, yMax: alcove.yMin - 0.01, zMin: alcove.zMin, zMax: alcove.zMax }, 'box:wallW'); collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: alcove.yMax, yMax: BOX.top - 0.05, zMin: alcove.zMin, zMax: alcove.zMax }, 'box:wallW'); collision.addBlocker({ xMin: BOX.xMin - wallT, xMax: BOX.xMin, yMin: BOX.floor - 1, yMax: BOX.top - 0.05, zMin: alcove.zMax, zMax: BOX.zMax }, 'box:wallW'); collision.addBlocker({ xMin: alcove.xMin - 0.4, xMax: alcove.xMin, yMin: alcove.yMin, yMax: alcove.yMax, zMin: alcove.zMin, zMax: alcove.zMax }, 'box:alcoveBack'); for (const [za, zb] of [[alcove.zMin - 0.4, alcove.zMin], [alcove.zMax, alcove.zMax + 0.4]]) collision.addBlocker({ xMin: alcove.xMin - 0.4, xMax: BOX.xMin, yMin: alcove.yMin, yMax: alcove.yMax, zMin: za, zMax: zb }, 'box:alcoveWall'); }
+    { // pierce the west wall's collision at District level where the platforms cross it
+      const hole = { zMin: -10, zMax: BOX.zMax, yMin: LEVELS.dcRail - 0.3, yMax: LEVELS.dcCeiling + 0.4 };
+      for (const b of collision.blockers.filter(b => b.userData && b.userData.tag === 'box:wallW' && b.max.z > hole.zMin && b.min.y < hole.yMax && b.max.y > hole.yMin)) {
+        collision.remove(b); const x0 = b.min.x, x1 = b.max.x, z0 = b.min.z, z1 = b.max.z, y0 = b.min.y, y1 = b.max.y;
+        if (z0 < hole.zMin) collision.addBlocker({ xMin: x0, xMax: x1, yMin: y0, yMax: y1, zMin: z0, zMax: hole.zMin }, 'box:wallW');
+        if (y0 < hole.yMin) collision.addBlocker({ xMin: x0, xMax: x1, yMin: y0, yMax: hole.yMin, zMin: Math.max(z0, hole.zMin), zMax: z1 }, 'box:wallW');
+        if (y1 > hole.yMax) collision.addBlocker({ xMin: x0, xMax: x1, yMin: hole.yMax, yMax: y1, zMin: Math.max(z0, hole.zMin), zMax: z1 }, 'box:wallW');
+      }
+    }
     collision.addBlocker({ xMin: IW.xMax, xMax: IW.xMax + 0.6, yMin: IW.y - 1, yMax: UNDERCROFT_Y + 1, zMin: BOX.zMax, zMax: IW.zMax + 0.6 }, 'box:extE');
     collision.addBlocker({ xMin: IW.xMin - 0.6, xMax: IW.xMax + 0.6, yMin: IW.y - 1, yMax: UNDERCROFT_Y + 1, zMin: IW.zMax, zMax: IW.zMax + 0.6 }, 'box:extS');
     collision.addBlocker({ xMin: IW.xMin - 0.6, xMax: IW.xMin, yMin: IW.y - 1, yMax: UNDERCROFT_Y + 1, zMin: BOX.zMax, zMax: IW.zMax }, 'box:extW');
@@ -457,8 +469,8 @@ function buildEmergencyStair(ctx, parent, B, mats, batch, signs) {
   B.add(K.yzQuad(STAIR.xMax + 0.42, UNDERCROFT_Y - 0.4, BOX.top, STAIR.zMin, STAIR.zMax + 0.4, 'east'), mats.grillage);
   B.add(K.xyQuad(STAIR.zMax + 0.42, STAIR.xMin - 0.1, STAIR.xMax + 0.42, UNDERCROFT_Y - 0.4, BOX.top, 'south'), mats.grillage);
   B.add(K.xyQuad(STAIR.zMax + 0.02, STAIR.xMin - 0.1, STAIR.xMax + 0.42, UNDERCROFT_Y - 0.4, BOX.top, 'north'), mats.grillage);
-  collision.addBlocker({ xMin: STAIR.xMax, xMax: STAIR.xMax + 0.44, yMin: UNDERCROFT_Y - 0.4, yMax: BOX.top + 2.5, zMin: STAIR.zMin, zMax: STAIR.zMax + 0.44 }, 'box:stairShaftE');
-  collision.addBlocker({ xMin: STAIR.xMin - 0.1, xMax: STAIR.xMax + 0.44, yMin: UNDERCROFT_Y - 0.4, yMax: BOX.top + 2.5, zMin: STAIR.zMax, zMax: STAIR.zMax + 0.44 }, 'box:stairShaftS');
+  collision.addBlocker({ xMin: STAIR.xMax, xMax: STAIR.xMax + 0.44, yMin: UNDERCROFT_Y - 0.4, yMax: BOX.top - 0.05, zMin: STAIR.zMin, zMax: STAIR.zMax + 0.44 }, 'box:stairShaftE');
+  collision.addBlocker({ xMin: STAIR.xMin - 0.1, xMax: STAIR.xMax + 0.44, yMin: UNDERCROFT_Y - 0.4, yMax: BOX.top - 0.05, zMin: STAIR.zMax, zMax: STAIR.zMax + 0.44 }, 'box:stairShaftS');
   const treadMerged = new K.Bucket(); for (const g of treadGeos) treadMerged.add(g, mats.precast); for (const g of nosGeos) treadMerged.add(g, mats.nosing); treadMerged.flush(parent, { name: 'emergencyStairTreads' });
 }
 
