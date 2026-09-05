@@ -177,3 +177,26 @@ open the paddles (remove their blocker for ~5 s while the player passes), and cl
 ### NPCs — `src/entities/npcs.js`
 Reads waypoint graphs registered by the world modules as `ctx.register('nav:<area>', { nodes: [{id, x,y,z}], edges: [[a,b]] })`
 and spawn points `ctx.register('spawn:<area>', [{x,y,z}])`. Uses the collision floors like the player.
+
+## Registry (as built)
+
+Names available through `ctx.get(name)` once the corresponding module has built:
+
+| name | provider | value |
+|---|---|---|
+| `trainService` | systems/trainService | timetable + train state machines; `on(evt)`, `nextTrains(n)`, `trains`, `lines` |
+| `track:jubileeUpper` … `track:districtWB` | systems/trainService | `Track` instances |
+| `peds:upper`, `peds:lower` | world/jubileePlatforms | platform edge doors: `setOpen(bool)`, `isOpen`, `openness`, `doorPositions` |
+| `indicator:1` … `indicator:4` | district / jubilee platforms | next-train dot-matrix boards: `set(lines)` |
+| `indicator:box-east`, `indicator:box-west`, `indicator:hall` | jubileeBox / ticketHall | summary boards (self-refreshing from the service) |
+| `speakers:street`, `speakers:ticketHall`, `speakers:box`, `speakers:district`, `speakers:jubileeUpper`, `speakers:jubileeLower` | world modules | PA loudspeaker positions used by the soundscape |
+| `nav:street`, `nav:ticketHall`, `nav:box`, `nav:district` | world modules | waypoint graphs merged by the NPC population |
+| `spawn:street`, `spawn:ticketHall`, `spawn:box`, `spawn:district`, `spawn:jubileeUpper`, `spawn:jubileeLower` | world modules | NPC spawn points |
+| `gates` | world/ticketHall | the 15 ticket gates: `{ index, position, wide, isOpen, open({npc}), close() }` |
+| `escalator:a` … `escalator:g` | world/jubileeBox | the seven escalator banks (entities/escalator) |
+| `npcs` | entities/npcs | `{ list, spawn(area), count, stats }` |
+| `soundscape`, `bigBen` | audio/soundscape | ambience beds, PA (`pa.say`), `bigBen.ring(quarter, hour)` |
+| `street`, `street:sun`, `street:vehicles`, `street:signals`, `street:clock` | world/street | sun/sky, traffic fleets, junction signals, the tower clock |
+| `district`, `ticketHall`, `jubileeBox` | world modules | module APIs (groups, frames, helpers) |
+
+Debug hooks on `window.__app`: `teleport(x,y,z,yaw,pitch)`, `advance(seconds)`, `stats()`, `ringBigBen(quarter, hour)`, `errors`, `built`.
