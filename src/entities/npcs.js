@@ -196,13 +196,24 @@ class Population {
     a.stepT += dt;
     switch (a.state) {
       case 'walk': case 'pause': {
-        // stuck detection: not moving while wanting to walk
-        if (a.state === 'walk' && a.selfSpeed < 0.12 && !a.onEsc) { a.stuck = (a.stuck || 0) + dt; if (a.stuck > (a.floor ? 3 : 1.2)) { a.stuck = 0; a._nextWaypoint(true); a.stuckCount = (a.stuckCount || 0) + 1; if (a.stuckCount > 3) { a.state = 'despawn'; } } } else a.stuck = 0;
+        // stuck detection by displacement over time (instantaneous speed flickers at slab edges)
+        if (!a.progPos) { a.progPos = a.pos.clone(); a.progT = 0; }
+        a.progT += dt;
+        if (a.progT > 1.6) {
+          const moved = Math.hypot(a.pos.x - a.progPos.x, a.pos.z - a.progPos.z); a.progPos.copy(a.pos); a.progT = 0;
+          if (a.state === 'walk' && !a.onEsc && moved < 0.35) {
+            a.stuckCount = (a.stuckCount || 0) + 1;
+            if (a.stuckCount > 4) { a.state = 'despawn'; break; }
+            // skip the waypoint we cannot reach; when off the floor, try re-routing from the nearest node instead
+            if (!a.floor && a.step && a.step.kind === 'goto' && a.stuckCount <= 2) { a.stepIdx--; this._advance(a); } else a._nextWaypoint(true);
+          }
+        }
         break;
       }
       case 'idle': {
         // arrived at the end of the path
-        if (a.step && a.step.kind === 'wait') { a.state = 'waiting'; a.lookAt = a.waitSpot ? a.waitSpot.face : null; a.user.tunnelYaw = a.waitSpot ? this._relYaw(a, a.waitSpot.tunnelYaw) : 0; a.user.indicatorYaw = (this.rng() < 0.5 ? -0.8 : 0.8); a.nextFidget = 0.5; a.timer = 0; }
+        if (a.step && a.step.kind === 'wait' && a.waitSpot && Math.abs(a.pos.y - a.waitSpot.y) > 1.0) { this._releaseSpot(a); a.plan = [{ kind: 'despawn' }]; a.stepIdx = -1; this._advance(a); }   // arrived on the wrong level (geometry gap): give up quietly
+        else if (a.step && a.step.kind === 'wait') { a.state = 'waiting'; a.lookAt = a.waitSpot ? a.waitSpot.face : null; a.user.tunnelYaw = a.waitSpot ? this._relYaw(a, a.waitSpot.tunnelYaw) : 0; a.user.indicatorYaw = (this.rng() < 0.5 ? -0.8 : 0.8); a.nextFidget = 0.5; a.timer = 0; }
         else if (a.step && a.step.kind === 'board') { this.stats.boarded++; a.state = 'despawn'; }
         else if (a.step && a.step.kind === 'alightOut') { this.planExit(a, a.step.platform); }
         else this._advance(a);
@@ -431,13 +442,14 @@ class Population {
       if (a.dead) continue;
       if (a.train) continue;
       const d = Math.hypot(a.pos.x - ref.x, a.pos.z - ref.z) + Math.abs(a.pos.y - ref.y) * 1.5;
-      const rate = d < 30 ? 1 : d < 70 ? 2 : d < 140 ? 4 : 8;
+      const rate = d < 30 ? 1 : d < 70 ? 2 : d < 140 ? 4 : 8; const farCull = d > 220;
       a.accum += dt; if ((this.tick + a.id) % rate !== 0) continue;
       near.length = 0; const cx = Math.floor(a.pos.x / CELL), cz = Math.floor(a.pos.z / CELL);
       for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const c = grid.get((cx + i) + ',' + (cz + j)); if (c) for (const o of c) near.push(o); }
       world.agentsNear = near;
       const step = Math.min(a.accum, 0.25); a.accum = 0;
-      a.update(step, world); this._step(a, step); a.render();
+      a.update(step, world); this._step(a, step); if (!farCull) a.render(); else if (!a.hidden) { a.hidden = true; this.pool.hide(a.slot); }
+      if (farCull) continue; if (a.hidden) a.hidden = false;
     }
     this._updateRiders(); for (const [, list] of this.riders) for (const a of list) if (!a.dead) a.render();
     this.pool.flush();

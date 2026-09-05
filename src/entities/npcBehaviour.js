@@ -12,6 +12,7 @@
 //                      escalator riding (stand right / walk left), stairs, gait phase, idle fidgets, head look.
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
+import { Collision } from '../core/collision.js';
 
 // ============================================================================ NavGraph
 export class NavGraph {
@@ -72,7 +73,7 @@ export function attachEscalators(G, collision, { linkDist = 7 } = {}) {
     const along = new THREE.Vector3(f.dx, 0, f.dz);
     const forward = (f.move.x * along.x + f.move.z * along.z) >= 0;     // steps travel a → b ?
     const entry = forward ? a : b, exit = forward ? b : a; const dir = forward ? along : along.clone().negate();
-    const ein = entry.clone().addScaledVector(dir, -1.9), eout = exit.clone().addScaledVector(dir, 1.9);
+    const ein = entry.clone().addScaledVector(dir, -3.6), eout = exit.clone().addScaledVector(dir, 3.6);   // beyond the 3 m landing plates, clear of the balustrade ends
     const nIn = G.add(ein.x, ein.y, ein.z, ['escEntry'], 'escalator'), nOut = G.add(eout.x, eout.y, eout.z, ['escExit'], 'escalator');
     const data = { ramp: f, dir: { x: dir.x, z: dir.z }, right: { x: -dir.z, z: dir.x }, halfWidth: f.halfWidth, entry: ein, exit: eout, name: f.tag || 'esc' };
     G.link(nIn, nOut, { oneWay: true, kind: 'esc', data, cost: ein.distanceTo(eout) * 0.8 });
@@ -209,15 +210,24 @@ export class Agent {
     if (!this.skipWalls) collision.resolve(this.pos, RADIUS, HEIGHT, STEP_UP);
     // ---- ground
     const onSlope = this.onEdge && (this.onEdge.kind === 'esc' || this.onEdge.kind === 'escReverse' || this.onEdge.kind === 'stairs');
-    const support = collision.floorAt(this.pos.x, this.pos.z, this.pos.y, { stepUp: 0.55, drop: onSlope ? 2.6 : 1.6 });
+    let support = null;
+    // on a segment that changes level (stairs, escalators) prefer the floor nearest the EXPECTED height along the segment,
+    // so an overlapping slab at the stair head (or a slab over a stair well) does not keep us on the wrong level
+    const wp = this.waypoint, pv = this.pathIdx > 0 ? this.path[this.pathIdx - 1] : null;
+    if (wp && pv && Math.abs(wp.y - pv.y) > 0.4) {
+      const sx = wp.x - pv.x, sz = wp.z - pv.z; const L2 = sx * sx + sz * sz || 1; const t = Math.max(0, Math.min(1, ((this.pos.x - pv.x) * sx + (this.pos.z - pv.z) * sz) / L2));
+      support = nearestFloor(collision, this.pos.x, this.pos.z, pv.y + (wp.y - pv.y) * t, 2.2);
+    }
+    if (!support) support = collision.floorAt(this.pos.x, this.pos.z, this.pos.y, { stepUp: 0.55, drop: onSlope ? 2.6 : 1.6 });
     if (support) {
+      if (!this.lastGood) this.lastGood = new THREE.Vector3(); this.lastGood.copy(this.pos);
       const dy = support.y - this.pos.y;
       if (Math.abs(dy) < 0.03 || this.floor === support.floor) this.pos.y = support.y; else this.pos.y += dy * Math.min(1, dt * 16);
       this.floor = support.floor;
     } else if (!this.skipWalls) {
       // nothing beneath (module not loaded here / stepped off a slab edge): step back, stop, and drift back towards the last waypoint we came from
       this.pos.x = prevX; this.pos.z = prevZ; this.vel.set(0, 0, 0); this.floor = null;
-      const back = this.pathIdx > 0 ? this.path[this.pathIdx - 1] : null; if (back) { const bx = back.x - this.pos.x, bz = back.z - this.pos.z; const bd = Math.hypot(bx, bz) || 1; this.pos.x += bx / bd * 0.4 * dt; this.pos.z += bz / bd * 0.4 * dt; }
+      if (this.lastGood) { const bx = this.lastGood.x - this.pos.x, bz = this.lastGood.z - this.pos.z; const bd = Math.hypot(bx, bz); if (bd > 0.01) { const k = Math.min(1, 0.25 / bd); this.pos.x += bx * k; this.pos.z += bz * k; } }
     }
     this.onEsc = !!(this.floor && this.floor.move);
     // ---- gait
@@ -290,6 +300,13 @@ export class Agent {
   }
 
   dispose() { if (this.slot >= 0) this.pool.free(this.slot); this.slot = -1; this.dead = true; }
+}
+
+/** The floor at (x,z) whose height is nearest to yExpected (within tol), or null. */
+export function nearestFloor(collision, x, z, yExpected, tol = 2) {
+  const cell = collision._cell(x, z); if (!cell) return null; let best = null, bd = tol;
+  for (const f of cell.floors) { const y = Collision.heightOf(f, x, z); if (y == null) continue; const d = Math.abs(y - yExpected); if (d < bd) { bd = d; best = { y, floor: f }; } }
+  return best;
 }
 
 /** Convert a node-id path into Vector3 waypoints with edge metadata (escalator lanes, gates, stairs). */
