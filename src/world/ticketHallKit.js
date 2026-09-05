@@ -22,6 +22,7 @@ export class Merger {
     if (!geo) return;
     if (rx || ry || rz) geo.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')));
     if (x || y || z) geo.translate(x, y, z);
+    { const a = geo.attributes.position.array; for (let q = 0; q < a.length; q++) if (!Number.isFinite(a[q])) { console.warn('[ticketHall merger] NaN geometry skipped:', geo.type, 'pose', x, y, z, rx, ry, rz, new Error().stack.split('\n').slice(2, 6).join(' | ')); return; } }
     let b = this.batches.get(mat); if (!b) { b = []; this.batches.set(mat, b); }
     b.push(geo.index ? geo.toNonIndexed() : geo); this.count++;
   }

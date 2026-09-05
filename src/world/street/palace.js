@@ -68,8 +68,10 @@ export function buildPalace(ctx, group, plan, state) {
     const rnd = mulberry(5); for (let k = 0; k < 14; k++) { const a = rnd() * Math.PI * 2, r = 0.6 + rnd() * 0.9, y = 1.6 + rnd() * 4; M.box(mats.ironBlack, 0.35 + rnd() * 0.5, 0.25 + rnd() * 0.6, 0.2 + rnd() * 0.4, { x: fx + Math.cos(a) * r, y, z: fz + Math.sin(a) * r, ry: a, rz: rnd() * 0.6 }); }
     M.torus(mats.gilt, 0.9, 0.12, 8, 16, { x: fx, y: 6.4, z: fz, rx: Math.PI / 2 }); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; M.tube(mats.gilt, { x: fx + Math.cos(a) * 0.9, y: 6.4, z: fz + Math.sin(a) * 0.9 }, { x: fx, y: 7.6, z: fz }, 0.06, 5); } M.sphere(mats.gilt, 0.2, { x: fx, y: 7.7, z: fz }); }
   // trees: the lime avenue just inside the north railings and the west side, three big catalpas by the hall
-  const canopyA = canopyGeometry(3), canopyB = canopyGeometry(9); const leavesA = I.set(canopyA, mats.leaf, { name: 'trees-a' }), leavesB = I.set(canopyB, mats.leafLight, { name: 'trees-b' });
-  const trunks = I.set(new THREE.CylinderGeometry(0.22, 0.34, 1, 7).translate(0, 0.5, 0), mats.bark, { name: 'trunks' });
+  // (the tree instancers live on state.late so that later parts — Whitehall, furniture — can add trees before the final flush)
+  const LI = state.late || I;
+  const canopyA = canopyGeometry(3), canopyB = canopyGeometry(9); const leavesA = LI.set(canopyA, mats.leaf, { name: 'trees-a' }), leavesB = LI.set(canopyB, mats.leafLight, { name: 'trees-b' });
+  const trunks = LI.set(new THREE.CylinderGeometry(0.22, 0.34, 1, 7).translate(0, 0.5, 0), mats.bark, { name: 'trunks' });
   const rnd = mulberry(17);
   const tree = (x, z, h, s, wide = 1) => { trunks.add(x, 0, z, { sy: h, sx: 1 + s * 0.15, sz: 1 + s * 0.15 }); const set = rnd() < 0.5 ? leavesA : leavesB; set.add(x, h + s * 0.7, z, { ry: rnd() * 6.28, sx: s * wide, sy: s * 0.9, sz: s * wide }); };
   for (let x = NPY.xMin + 8; x <= NPY.xMax - 6; x += 7.5) tree(x + (rnd() - 0.5), NPY.zMin + 3.2 + (rnd() - 0.5) * 0.4, 5.5 + rnd() * 1.5, 3.4 + rnd() * 0.8);

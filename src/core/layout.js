@@ -97,9 +97,9 @@ export const TICKET_HALL = {
   entrancePassage: { xMin: -5, xMax: 5, zMin: -6.5, zMax: -3, y: 0 },              // street level, between Tesco Express (W) and Caffè Nero (E)
   mainStairs: { xMin: -4.5, xMax: 3.5, zTop: -6.5, zBottom: -13.5, yTop: LEVELS.street, yBottom: LEVELS.concourse, steps: 16 },   // descends NORTH
   streetLift: { x: -8, z: -8 },                                                       // arcade ↔ concourse, west of the passage
-  ticketWindows: { x: -45, zMin: -38, zMax: -26, facing: 'east' },                   // former ticket office, NW/west wall (blank, Tensa barriers)
+  ticketWindows: { x: -45, zMin: -28, zMax: -14, facing: 'east' },   // split either side of the Whitehall passage mouth                   // former ticket office, NW/west wall (blank, Tensa barriers)
   ticketMachines: { x: -45, zMin: -15, zMax: -10, count: 5, facing: 'east' },         // flush in the wall near the gateline
-  cashMachines: { z: -40, xMin: -32, xMax: -22, count: 4, facing: 'south' },   // on the north wall
+  cashMachines: { x: -45, zMin: -38, zMax: -34, count: 4, facing: 'east' },   // west wall, north of the former ticket windows
   payphones: { x: 20, z: 11, count: 4 },
   // Gateline: runs NW–SE across the middle of the hall. Paid side is to the NORTH-EAST of the line.
   gateline: { from: [-13, -26], to: [0, -21], gates: 15, wideGateIndex: 0, boothAt: 'se' },   // c. 14 m for 15 gates
@@ -258,8 +258,8 @@ export const ZONES = [
   { id: 'train', name: 'On the train', reverb: 'train' },
   { id: 'jubileePlatformUpper', name: 'Jubilee line — platform 3 (eastbound)', reverb: 'subsurface', box: jubZone(LEVELS.jubUpper) },
   { id: 'jubileePlatformLower', name: 'Jubilee line — platform 4 (westbound)', reverb: 'subsurface', box: jubZone(LEVELS.jubLower) },
-  { id: 'dcPlatform1', name: 'District & Circle lines — platform 1 (westbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: 1.9, tMax: 15, yMin: LEVELS.dcPlatform - 0.6, yMax: LEVELS.dcCeiling } },
-  { id: 'dcPlatform2', name: 'District & Circle lines — platform 2 (eastbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: -15, tMax: -1.9, yMin: LEVELS.dcPlatform - 0.6, yMax: LEVELS.dcCeiling } },
+  { id: 'dcPlatform1', name: 'District & Circle lines — platform 1 (westbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: 1.9, tMax: 15, yMin: LEVELS.dcPlatform - 0.3, yMax: LEVELS.dcCeiling } },
+  { id: 'dcPlatform2', name: 'District & Circle lines — platform 2 (eastbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: -15, tMax: -1.9, yMin: LEVELS.dcPlatform - 0.3, yMax: LEVELS.dcCeiling } },
   { id: 'jubileeStairs', name: 'Jubilee line — emergency stairs', reverb: 'subsurface', box: { xMin: -64, xMax: -49, zMin: -3.5, zMax: 1.5, yMin: LEVELS.jubLower - 1, yMax: LEVELS.jubUpper + 3.5 } },
   { id: 'box', name: 'Jubilee line escalators', reverb: 'box', box: { xMin: -41, xMax: 45, zMin: -30, zMax: 16, yMin: LEVELS.boxFloor - 1, yMax: LEVELS.boxTop - 0.4 } },
   { id: 'ticketHall', name: 'Westminster — ticket hall', reverb: 'hall', box: { xMin: -53, xMax: 49, zMin: -41, zMax: 20, yMin: LEVELS.concourse - 0.6, yMax: LEVELS.concourseCeiling + 0.6 } },

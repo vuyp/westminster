@@ -42,13 +42,15 @@ export function buildThames(ctx, group, plan, state) {
   for (let z = -14; z > plan.riverside.zMin; z -= 27) { if (z > -80 && z < -68) continue; dolphinSet.add(WALL_X - 0.05, 1.1, z); globeSet.add(WALL_X - 0.05, 1.1, z); blk({ xMin: WALL_X - 0.7, xMax: WALL_X + 0.6, yMin: -1, yMax: 3, zMin: z - 0.6, zMax: z + 0.6 }, 'dolphinLamp'); }
   for (let z = 40; z < 420; z += 27) { dolphinSet.add(WALL_X - 0.05, 1.1, z); globeSet.add(WALL_X - 0.05, 1.1, z); }
   // Embankment flagpoles with Union flags
-  for (const z of [-30, -120]) { M.chunk('river'); M.cyl(mats.white, 0.06, 0.09, 9, 8, { x: WALL_X - 1.8, y: 4.5, z }); M.quad(new THREE.MeshStandardMaterial({ map: T.roundel ? unionFlagLite(T) : null, side: THREE.DoubleSide, roughness: 0.9 }), 2.4, 1.2, { x: WALL_X - 1.8 - 1.2, y: 8.2, z: z + 0.05, facing: 'south' }); }
+  { const flagMat = new THREE.MeshStandardMaterial({ map: unionFlagLite(T), side: THREE.DoubleSide, roughness: 0.9 });
+    for (const z of [-30, -120]) { M.chunk('river'); M.cyl(mats.white, 0.06, 0.09, 9, 8, { x: WALL_X - 1.8, y: 4.5, z }); M.quad(flagMat, 2.4, 1.2, { x: WALL_X - 1.8 - 1.2, y: 8.2, z: z + 0.05, facing: 'south' }); blk({ xMin: WALL_X - 2.1, xMax: WALL_X - 1.5, yMin: -1, yMax: 3, zMin: z - 0.3, zMax: z + 0.3 }, 'flagpole'); } }
 
   // ================================================================ JLE vent grates (four 3.5 × 2 m panels + a strip), with the tunnel-air rumble
   { const V = S.ventGrates; const pitch = (V.zMax - V.zMin) / V.count; M.chunk('river');
     for (let i = 0; i < V.count; i++) { const z = V.zMin + (i + 0.5) * pitch; M.box(mats.grate, 2.0, 0.06, 3.5, { x: V.x, y: 0.03, z }); M.box(mats.steelGrey, 2.3, 0.02, 3.8, { x: V.x, y: 0.045, z }); }
     M.box(mats.grate, 0.5, 0.05, 12, { x: V.x + 2.2, y: 0.03, z: (V.zMin + V.zMax) / 2 });
-    const em = audio.emitter({ position: new THREE.Vector3(V.x, 0.2, (V.zMin + V.zMax) / 2), synth: 'tunnelAir', params: { level: 0.5 }, gain: 0.45, refDistance: 3, maxDistance: 30 }); state.emitters.push(em); }
+    // (the warm-air rumble of the grates is emitted by the soundscape module — src/audio/soundscape.js — so it is not duplicated here)
+    void audio; }
 
   // ================================================================ Westminster Pier: pontoon, shelter, gangway, kiosks, totem, moored river bus
   { const P = S.pier; M.chunk('pier'); const PY = WATER + 0.9;

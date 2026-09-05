@@ -35,6 +35,7 @@ export function createBatcher() {
     add(geometry, material, matrix = null) {
       let g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
       if (matrix) g.applyMatrix4(matrix);
+      { const a = g.attributes.position.array; for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])) { console.warn('[batcher] skipped geometry with NaN positions:', geometry.type, geometry.name || '', 'verts', g.attributes.position.count, matrix ? 'matrix ' + matrix.elements.map(v => +v.toFixed(2)).join(',') : 'no matrix', new Error().stack.split('\n').slice(2, 5).join(' | ')); return; } }
       if (!g.attributes.normal) g.computeVertexNormals();
       if (!g.attributes.uv) { g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); }
       // drop any extra attributes (uv1, color…) so all geometries under a material merge cleanly

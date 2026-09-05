@@ -487,3 +487,166 @@ export function bluePanel(T, lines, { width = 1024, height = 256, roundel = fals
 export function nameplate(T, name, { width = 1024, height = 300 } = {}) {
   return T.sign({ width, height, bg: '#f6f4ee', border: { color: '#111', width: 8 }, lines: [{ text: 'CITY OF WESTMINSTER', x: width / 2, y: height * 0.27, size: height * 0.18, align: 'center', color: '#c8102e' }, { text: name, x: width / 2, y: height * 0.7, size: height * 0.36, align: 'center', color: '#111' }, { text: 'SW1', x: width * 0.94, y: height * 0.93, size: height * 0.14, align: 'right', color: '#111' }] });
 }
+
+// ======================================================================= extra textures (furniture, vehicles, sky)
+/** A layer of broken stratocumulus: white with alpha, tileable. */
+export function cloudTexture(T, { size = 1024, seed = 91, cover = 0.55 } = {}) {
+  const a = T.noiseField(size, { octaves: 6, seed, baseFreq: 3, gain: 0.55 }); const b = T.noiseField(size, { octaves: 4, seed: seed + 3, baseFreq: 9, gain: 0.5 });
+  const c = T.canvas(size, size); const ctx = c.getContext('2d'); const img = ctx.createImageData(size, size); const d = img.data;
+  for (let i = 0; i < size * size; i++) { const v = a[i] * 0.75 + b[i] * 0.25; const t = Math.max(0, Math.min(1, (v - (1 - cover) * 0.75) / 0.28)); const al = t * t * (3 - 2 * t); const shade = 235 + (b[i] - 0.5) * 30; d[i * 4] = shade; d[i * 4 + 1] = shade; d[i * 4 + 2] = shade + 6; d[i * 4 + 3] = al * 255; }
+  ctx.putImageData(img, 0, 0); const t = T.toTexture(c); return t;
+}
+/** K6 telephone box side: red frame, three columns of small panes, black 'TELEPHONE' band. 0.92 × 2.4 m. */
+export function k6Texture(T, { ppm = 160 } = {}) {
+  const w = Math.round(0.92 * ppm), h = Math.round(2.4 * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  ctx.fillStyle = '#b3181c'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#111'; ctx.fillRect(0.06 * ppm, 0.12 * ppm, w - 0.12 * ppm, 0.28 * ppm); ctx.fillStyle = '#f4f4f0'; ctx.font = `bold ${0.16 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TELEPHONE', w / 2, 0.26 * ppm);
+  const cols = 3, rows = 6, x0 = 0.09 * ppm, y0 = 0.5 * ppm, gw = (w - 2 * x0) / cols, gh = (h - y0 - 0.35 * ppm) / rows;
+  for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) { const x = x0 + k * gw, y = y0 + r * gh; const g = ctx.createLinearGradient(x, y, x, y + gh); g.addColorStop(0, '#6c7c86'); g.addColorStop(1, '#2d383f'); ctx.fillStyle = g; ctx.fillRect(x + 0.02 * ppm, y + 0.02 * ppm, gw - 0.04 * ppm, gh - 0.04 * ppm); }
+  ctx.fillStyle = '#8f1216'; ctx.fillRect(0, h - 0.3 * ppm, w, 0.3 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** TfL bus stop flag: white, red roundel, stop letter, name and routes. 0.45 × 0.6 m. */
+export function busFlagTexture(T, { letter = 'H', name = 'Westminster Station', sub = 'Westminster Pier', routes = ['11'], towards = 'towards Waterloo' } = {}) {
+  const w = 384, h = 512; const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+  T.drawRoundel(ctx, 110, 110, 88, { text: '', ringColor: '#dc241f', barColor: '#dc241f' });
+  ctx.fillStyle = '#111'; ctx.font = `bold 120px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(letter, 300, 110);
+  ctx.fillStyle = '#dc241f'; ctx.fillRect(0, 210, w, 8);
+  ctx.fillStyle = '#111'; ctx.textAlign = 'left'; ctx.font = `bold 44px ${FONT}`; ctx.fillText(name, 20, 262); ctx.font = `normal 36px ${FONT}`; ctx.fillText(sub, 20, 312);
+  ctx.fillStyle = '#dc241f'; ctx.fillRect(0, 350, w, 6);
+  ctx.fillStyle = '#111'; ctx.font = `bold 64px ${FONT}`; ctx.fillText(routes.join('  '), 20, 410); ctx.font = `normal 28px ${FONT}`; ctx.fillText(towards, 20, 470);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Legible London wayfinding monolith face: dark blue with the yellow 'Walk' band and a stylised map. 0.5 × 2.2 m. */
+export function legibleLondonTexture(T, { here = 'Westminster', seed = 3 } = {}) {
+  const w = 256, h = 1024; const c = T.canvas(w, h); const ctx = c.getContext('2d'); const rnd = mulberry(seed);
+  ctx.fillStyle = '#0d1b3d'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#ffd200'; ctx.fillRect(0, 0, w, 70); ctx.fillStyle = '#0d1b3d'; ctx.font = `bold 40px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('Walk', 14, 36);
+  ctx.fillStyle = '#ffffff'; ctx.font = `bold 34px ${FONT}`; ctx.fillText(here, 14, 110); ctx.font = `normal 22px ${FONT}`; ctx.fillStyle = '#c9d2e6'; ctx.fillText('5 minute walk', 14, 146);
+  // map: cream ground, streets, blue river, landmarks
+  ctx.fillStyle = '#e9e4d6'; ctx.fillRect(14, 180, w - 28, 520); ctx.fillStyle = '#9ec2d9'; ctx.fillRect(170, 180, 72, 520);
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 9; for (let i = 0; i < 6; i++) { ctx.beginPath(); const y = 200 + rnd() * 480; ctx.moveTo(14, y); ctx.lineTo(170, y + (rnd() - 0.5) * 60); ctx.stroke(); } for (let i = 0; i < 3; i++) { ctx.beginPath(); const x = 30 + rnd() * 130; ctx.moveTo(x, 180); ctx.lineTo(x + (rnd() - 0.5) * 40, 700); ctx.stroke(); }
+  ctx.fillStyle = '#b9ad8f'; for (let i = 0; i < 14; i++) ctx.fillRect(20 + rnd() * 130, 190 + rnd() * 480, 10 + rnd() * 22, 8 + rnd() * 18);
+  ctx.fillStyle = '#dc241f'; ctx.beginPath(); ctx.arc(96, 440, 9, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#0d1b3d'; ctx.font = `bold 18px ${FONT}`; ctx.fillText('You are here', 60, 470);
+  ctx.fillStyle = '#ffffff'; ctx.font = `normal 20px ${FONT}`; ['Houses of Parliament', 'Westminster Abbey', 'Whitehall', 'Westminster Pier', 'London Eye'].forEach((t, i) => ctx.fillText('• ' + t, 14, 740 + i * 34));
+  T.drawRoundel(ctx, 40, 960, 26, { text: '' }); ctx.fillStyle = '#ffffff'; ctx.font = `bold 22px ${FONT}`; ctx.fillText('Westminster', 76, 960);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** 'City of Westminster · Westminster Station · Public Subway (· Toilets)' cast-iron arch sign: black with cream lettering. w × h metres. */
+export function subwayArchTexture(T, { toilets = true, w = 4.2, h = 0.7, ppm = 220 } = {}) {
+  const pw = Math.round(w * ppm), ph = Math.round(h * ppm); const c = T.canvas(pw, ph); const ctx = c.getContext('2d');
+  ctx.fillStyle = '#17171a'; ctx.fillRect(0, 0, pw, ph); ctx.strokeStyle = '#c9a227'; ctx.lineWidth = ppm * 0.02; ctx.strokeRect(ppm * 0.03, ppm * 0.03, pw - ppm * 0.06, ph - ppm * 0.06);
+  ctx.fillStyle = '#e9dfc0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `normal ${0.14 * ppm}px ${FONT}`; ctx.fillText('CITY OF WESTMINSTER', pw / 2, 0.17 * ppm);
+  ctx.font = `bold ${0.24 * ppm}px ${FONT}`; ctx.fillText('WESTMINSTER STATION', pw / 2, 0.38 * ppm);
+  ctx.font = `normal ${0.14 * ppm}px ${FONT}`; ctx.fillText(toilets ? 'PUBLIC SUBWAY  ·  TOILETS' : 'PUBLIC SUBWAY', pw / 2, 0.57 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Traffic-signal head face (three lenses) — the lit state is done with separate emissive discs; this is the black housing with hoods. */
+export function signalHousingTexture(T) {
+  const w = 128, h = 384; const c = T.canvas(w, h); const ctx = c.getContext('2d'); ctx.fillStyle = '#1a1a1c'; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = '#0a0a0b'; ctx.beginPath(); ctx.arc(64, 64 + i * 128, 44, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(10, 14 + i * 128, 108, 8); }
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+
+// ---- vehicles: bus (New Routemaster-ish), black cab, generic car. Every texture is drawn for one face of a BoxGeometry body.
+function glassGrad(ctx, x, y, w, h, top = '#5c6f7c', bottom = '#1a2126') { const g = ctx.createLinearGradient(x, y, x, y + h); g.addColorStop(0, top); g.addColorStop(0.5, '#2f3c45'); g.addColorStop(1, bottom); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fillRect(x + w * 0.08, y + h * 0.1, w * 0.18, h * 0.8); }
+/** Bus side. `nearside` = doors, front at the LEFT of the texture; offside: front at the RIGHT. 11.2 × 4.4 m. */
+export function busSideTexture(T, { nearside = true, route = '11', ppm = 92, red = '#c8231c' } = {}) {
+  const L = 11.2, H = 4.4; const w = Math.round(L * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  const X = (m) => nearside ? m * ppm : w - m * ppm;   // metres from the FRONT → px
+  const rect = (m0, m1, y0, y1, fill) => { const a = X(m0), b = X(m1); ctx.fillStyle = fill; ctx.fillRect(Math.min(a, b), h - y1 * ppm, Math.abs(b - a), (y1 - y0) * ppm); };
+  const glass = (m0, m1, y0, y1) => { const a = X(m0), b = X(m1); glassGrad(ctx, Math.min(a, b), h - y1 * ppm, Math.abs(b - a), (y1 - y0) * ppm); };
+  ctx.fillStyle = red; ctx.fillRect(0, 0, w, h);
+  rect(0, L, 0, 0.45, '#2a2a2a');                                                   // skirt shadow
+  rect(0, L, 4.1, 4.4, '#a81a15');                                                  // roof edge
+  // lower deck windows (the NBfL sweeping glazing), doors on the nearside
+  const lowY0 = 1.35, lowY1 = 2.55, upY0 = 2.85, upY1 = 3.95;
+  if (nearside) { glass(0.55, 2.35, lowY0, upY1 - 0.05); rect(0.55, 2.35, 2.55, 2.85, red); rect(2.4, 3.6, 0.45, 2.7, '#1d1d1f'); glass(2.55, 3.45, 1.0, 2.55); rect(3.0, 3.03, 0.5, 2.7, '#3a3a3c'); }   // front door
+  else glass(0.55, 2.35, lowY0, upY1 - 0.05);
+  const segs = nearside ? [[3.75, 5.6], [5.75, 7.2], [8.6, 10.5]] : [[2.5, 4.4], [4.55, 6.4], [6.55, 8.4], [8.55, 10.5]];
+  for (const [a, b] of segs) glass(a, b, lowY0, lowY1);
+  if (nearside) { rect(7.3, 8.5, 0.45, 2.7, '#1d1d1f'); glass(7.45, 8.35, 1.0, 2.55); rect(7.9, 7.93, 0.5, 2.7, '#3a3a3c'); }   // middle door
+  for (const [a, b] of [[0.55, 2.35], [2.5, 4.4], [4.55, 6.4], [6.55, 8.4], [8.55, 10.5]]) glass(a, b, upY0, upY1);
+  // the NBfL's diagonal rear-stair glazing band
+  { const a = X(8.6), b = X(10.8); ctx.save(); ctx.beginPath(); ctx.moveTo(a, h - upY0 * ppm); ctx.lineTo(b, h - lowY0 * ppm); ctx.lineTo(b, h - upY1 * ppm); ctx.lineTo(a, h - upY1 * ppm); ctx.closePath(); ctx.clip(); glassGrad(ctx, Math.min(a, b), h - upY1 * ppm, Math.abs(b - a), (upY1 - lowY0) * ppm); ctx.restore(); }
+  // wheel arches (black) — front axle 2.9 m from the front, rear axle 8.4 m
+  for (const m of [2.9, 8.4]) { ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.arc(X(m), h - 0.5 * ppm, 0.62 * ppm, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#0c0c0c'; ctx.fillRect(X(m) - 0.62 * ppm, h - 0.5 * ppm, 1.24 * ppm, 0.5 * ppm); }
+  // roundel, fleet name, route number box, 'Buses' branding
+  T.drawRoundel(ctx, X(nearside ? 5.0 : 6.4), h - 0.95 * ppm, 0.28 * ppm, { text: '', ringColor: '#ffffff', barColor: '#ffffff' });
+  ctx.fillStyle = '#ffffff'; ctx.font = `bold ${0.3 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(route, X(nearside ? 6.2 : 5.2), h - 0.95 * ppm);
+  ctx.fillStyle = '#ffd200'; ctx.fillRect(X(0.1), h - 3.0 * ppm, nearside ? 0.14 * ppm : -0.14 * ppm, 0.6 * ppm);   // yellow grab-pole glimpse at the front
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Bus front (2.5 × 4.4): two-deck windscreen, blind box, headlights, number plate. */
+export function busFrontTexture(T, { ppm = 200, red = '#c8231c' } = {}) {
+  const W = 2.5, H = 4.4; const w = Math.round(W * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  ctx.fillStyle = red; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, h - 0.45 * ppm, w, 0.45 * ppm);
+  glassGrad(ctx, 0.12 * ppm, h - 2.55 * ppm, w - 0.24 * ppm, 1.35 * ppm);                       // lower windscreen
+  glassGrad(ctx, 0.12 * ppm, h - 4.05 * ppm, w - 0.24 * ppm, 0.95 * ppm, '#4d5d69', '#1a2126'); // upper windscreen
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0.15 * ppm, h - 3.05 * ppm, w - 0.3 * ppm, 0.5 * ppm);   // blind box (the amber blind plane sits in front of it)
+  for (const x of [0.42, W - 0.42]) { ctx.fillStyle = '#f0f0e8'; ctx.beginPath(); ctx.ellipse(x * ppm, h - 0.85 * ppm, 0.17 * ppm, 0.11 * ppm, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ffb000'; ctx.beginPath(); ctx.arc(x * ppm + (x < 1 ? -0.16 : 0.16) * ppm, h - 0.85 * ppm, 0.05 * ppm, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#f4f4f0'; ctx.fillRect(w / 2 - 0.26 * ppm, h - 0.72 * ppm, 0.52 * ppm, 0.12 * ppm); ctx.fillStyle = '#111'; ctx.font = `bold ${0.09 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('LTZ 1011', w / 2, h - 0.66 * ppm);
+  ctx.fillStyle = '#111'; ctx.fillRect(0.2 * ppm, h - 1.18 * ppm, w - 0.4 * ppm, 0.06 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Bus rear (2.5 × 4.4): rear glazing, lights, route number, the NBfL rounded rear look. */
+export function busRearTexture(T, { ppm = 200, red = '#c8231c', route = '11' } = {}) {
+  const W = 2.5, H = 4.4; const w = Math.round(W * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  ctx.fillStyle = red; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, h - 0.45 * ppm, w, 0.45 * ppm);
+  glassGrad(ctx, 0.3 * ppm, h - 4.0 * ppm, w - 0.6 * ppm, 1.1 * ppm); glassGrad(ctx, 0.5 * ppm, h - 2.5 * ppm, w - 1.0 * ppm, 1.0 * ppm);
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0.35 * ppm, h - 3.05 * ppm, w - 0.7 * ppm, 0.42 * ppm); ctx.fillStyle = '#ffb300'; ctx.font = `bold ${0.32 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(route, w / 2, h - 2.84 * ppm);
+  for (const x of [0.3, W - 0.3]) { ctx.fillStyle = '#d0141a'; ctx.fillRect(x * ppm - 0.1 * ppm, h - 1.5 * ppm, 0.2 * ppm, 0.7 * ppm); ctx.fillStyle = '#ffb000'; ctx.fillRect(x * ppm - 0.1 * ppm, h - 1.5 * ppm, 0.2 * ppm, 0.2 * ppm); ctx.fillStyle = '#f0f0f0'; ctx.fillRect(x * ppm - 0.1 * ppm, h - 1.0 * ppm, 0.2 * ppm, 0.15 * ppm); }
+  ctx.fillStyle = '#ffd200'; ctx.fillRect(w / 2 - 0.26 * ppm, h - 0.75 * ppm, 0.52 * ppm, 0.12 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Black cab side (4.85 × 1.85, body from y = 0.35): tall glazed cabin, 'TAXI' door lettering, wheel arches. */
+export function cabSideTexture(T, { nearside = true, ppm = 200, paint = '#0e0e10' } = {}) {
+  const L = 4.85, H = 1.85; const w = Math.round(L * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  const X = (m) => nearside ? m * ppm : w - m * ppm;
+  ctx.fillStyle = paint; ctx.fillRect(0, 0, w, h);
+  const glass = (m0, m1, y0, y1) => { const a = X(m0), b = X(m1); glassGrad(ctx, Math.min(a, b), h - y1 * ppm, Math.abs(b - a), (y1 - y0) * ppm, '#4c5a64', '#161b1f'); };
+  glass(0.95, 1.7, 1.05, 1.7); glass(1.8, 2.8, 1.05, 1.72); glass(2.9, 3.9, 1.05, 1.72); glass(4.0, 4.7, 1.05, 1.62);
+  ctx.fillStyle = '#1a1a1c'; for (const m of [1.75, 2.85, 3.95]) ctx.fillRect(X(m) - 0.02 * ppm, h - 1.72 * ppm, 0.04 * ppm, 0.7 * ppm);
+  ctx.fillStyle = '#c9c9c4'; ctx.fillRect(X(1.85), h - 0.62 * ppm, nearside ? 0.15 * ppm : -0.15 * ppm, 0.04 * ppm);   // door handle
+  ctx.fillStyle = '#e8e8e2'; ctx.font = `bold ${0.16 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TAXI', X(3.4), h - 0.55 * ppm);
+  for (const m of [0.85, 3.95]) { ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(X(m), h - 0.35 * ppm, 0.45 * ppm, Math.PI, 0); ctx.fill(); ctx.fillRect(X(m) - 0.45 * ppm, h - 0.35 * ppm, 0.9 * ppm, 0.35 * ppm); }
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(0, h - 1.0 * ppm, w, 0.02 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Cab front / rear (1.85 wide × 1.85): rear = true draws the back. */
+export function cabEndTexture(T, { rear = false, ppm = 200, paint = '#0e0e10', plate = 'LX19 CAB' } = {}) {
+  const W = 1.85, H = 1.85; const w = Math.round(W * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  ctx.fillStyle = paint; ctx.fillRect(0, 0, w, h);
+  if (!rear) { glassGrad(ctx, 0.12 * ppm, h - 1.7 * ppm, w - 0.24 * ppm, 0.62 * ppm, '#55636d', '#1b2126'); ctx.fillStyle = '#26262a'; ctx.fillRect(0.2 * ppm, h - 0.95 * ppm, w - 0.4 * ppm, 0.5 * ppm); ctx.fillStyle = '#5a5a5e'; ctx.fillRect(0.22 * ppm, h - 0.75 * ppm, w - 0.44 * ppm, 0.04 * ppm); ctx.fillRect(0.22 * ppm, h - 0.65 * ppm, w - 0.44 * ppm, 0.04 * ppm);
+    for (const x of [0.3, W - 0.3]) { ctx.fillStyle = '#eeeee6'; ctx.beginPath(); ctx.arc(x * ppm, h - 0.85 * ppm, 0.13 * ppm, 0, Math.PI * 2); ctx.fill(); } }
+  else { glassGrad(ctx, 0.2 * ppm, h - 1.68 * ppm, w - 0.4 * ppm, 0.55 * ppm, '#4c5a64', '#161b1f'); for (const x of [0.22, W - 0.22]) { ctx.fillStyle = '#c8121a'; ctx.fillRect(x * ppm - 0.08 * ppm, h - 1.05 * ppm, 0.16 * ppm, 0.45 * ppm); ctx.fillStyle = '#ffb000'; ctx.fillRect(x * ppm - 0.08 * ppm, h - 0.75 * ppm, 0.16 * ppm, 0.12 * ppm); } }
+  ctx.fillStyle = rear ? '#ffd200' : '#f4f4f0'; ctx.fillRect(w / 2 - 0.26 * ppm, h - 0.5 * ppm, 0.52 * ppm, 0.11 * ppm); ctx.fillStyle = '#111'; ctx.font = `bold ${0.08 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(plate, w / 2, h - 0.445 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Generic hatchback side / ends in a given paint. */
+export function carSideTexture(T, { paint = '#c8c9cc', ppm = 200, nearside = true } = {}) {
+  const L = 4.3, H = 1.1; const w = Math.round(L * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  const X = (m) => nearside ? m * ppm : w - m * ppm;
+  ctx.fillStyle = paint; ctx.fillRect(0, 0, w, h); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, h - 0.2 * ppm, w, 0.2 * ppm);
+  ctx.fillStyle = '#3a3a3e'; for (const m of [1.85, 2.95]) ctx.fillRect(X(m) - 0.015 * ppm, 0, 0.03 * ppm, h);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(X(1.95), h - 0.62 * ppm, nearside ? 0.14 * ppm : -0.14 * ppm, 0.035 * ppm); ctx.fillRect(X(3.05), h - 0.62 * ppm, nearside ? 0.14 * ppm : -0.14 * ppm, 0.035 * ppm);
+  for (const m of [0.75, 3.5]) { ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(X(m), h - 0.28 * ppm, 0.4 * ppm, Math.PI, 0); ctx.fill(); ctx.fillRect(X(m) - 0.4 * ppm, h - 0.28 * ppm, 0.8 * ppm, 0.28 * ppm); }
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, h - 0.95 * ppm, w, 0.02 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+export function carEndTexture(T, { paint = '#c8c9cc', rear = false, ppm = 200 } = {}) {
+  const W = 1.8, H = 1.1; const w = Math.round(W * ppm), h = Math.round(H * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
+  ctx.fillStyle = paint; ctx.fillRect(0, 0, w, h); ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(0, h - 0.2 * ppm, w, 0.2 * ppm);
+  if (!rear) { ctx.fillStyle = '#1f1f22'; ctx.fillRect(0.25 * ppm, h - 0.75 * ppm, w - 0.5 * ppm, 0.3 * ppm); for (const x of [0.32, W - 0.32]) { ctx.fillStyle = '#eeeee6'; ctx.fillRect(x * ppm - 0.18 * ppm, h - 0.85 * ppm, 0.36 * ppm, 0.16 * ppm); } }
+  else for (const x of [0.28, W - 0.28]) { ctx.fillStyle = '#c8121a'; ctx.fillRect(x * ppm - 0.16 * ppm, h - 0.85 * ppm, 0.32 * ppm, 0.2 * ppm); }
+  ctx.fillStyle = rear ? '#ffd200' : '#f4f4f0'; ctx.fillRect(w / 2 - 0.26 * ppm, h - 0.45 * ppm, 0.52 * ppm, 0.11 * ppm);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}
+/** Glazed cabin band for a car (top box): dark glass all round with pillars. */
+export function carCabinTexture(T, { ppm = 200, w = 2.2, h = 0.55 } = {}) {
+  const pw = Math.round(w * ppm), ph = Math.round(h * ppm); const c = T.canvas(pw, ph); const ctx = c.getContext('2d');
+  glassGrad(ctx, 0, 0, pw, ph, '#4a5862', '#171c20'); ctx.fillStyle = '#1e1e21'; ctx.fillRect(0, 0, 0.04 * ppm, ph); ctx.fillRect(pw - 0.04 * ppm, 0, 0.04 * ppm, ph); ctx.fillRect(pw * 0.48, 0, 0.04 * ppm, ph);
+  return T.toTexture(c, { wrap: THREE.ClampToEdgeWrapping });
+}

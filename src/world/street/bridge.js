@@ -22,7 +22,7 @@ export function buildBridge(ctx, group, plan, state) {
   // ================================================================ deck: carriageway + footways as ribbons following the profile
   const ribbon = (mat, zMin, zMax, dy, step = 5) => {
     const pos = [], uv = [], idx = []; let k = 0;
-    for (let x = X0; x <= X1 + 0.01; x += step) { const xx = Math.min(x, X1); const y = deckY(xx) + dy; pos.push(xx, y, zMin, xx, y, zMax); uv.push(xx, zMin, xx, zMax); if (k > 0) { const b = (k - 1) * 2; idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); } k++; }
+    for (let x = X0; x <= X1 + 0.01; x += step) { const xx = Math.min(x, X1); const y = deckY(xx) + dy; pos.push(xx, y, zMin, xx, y, zMax); uv.push(xx, zMin, xx, zMax); if (k > 0) { const b = (k - 1) * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); } k++; }   // wound so the normals face UP
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); M.add(mat, g);
   };
   M.chunk('deck');
