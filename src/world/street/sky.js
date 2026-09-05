@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { DEG } from './kit.js';
+import { DEG, cloudTexture } from './kit.js';
 
 export function buildSky(ctx, group) {
   const { scene, quality } = ctx;
@@ -40,6 +40,16 @@ export function buildSky(ctx, group) {
   // ---- haze
   scene.fog = new THREE.Fog(0xcfd6dd, 320, 1550);
 
+  // ---- a broken layer of stratocumulus at 700 m, drifting slowly from the south-west (bright London afternoon, not a clear sky)
+  let clouds = null;
+  try {
+    const tex = cloudTexture(ctx.T); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(2.2, 2.2);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, opacity: 0.92 });
+    clouds = new THREE.Mesh(new THREE.PlaneGeometry(4200, 4200), mat); clouds.rotation.x = Math.PI / 2; clouds.position.set(0, 700, 0); clouds.frustumCulled = false; clouds.name = 'clouds'; clouds.renderOrder = -1;
+    group.add(clouds);
+    ctx.onUpdate((dt) => { tex.offset.x += dt * 0.0011; tex.offset.y -= dt * 0.0007; });
+  } catch (e) { console.warn('[street] cloud layer failed', e); }
+
   // keep the shadow frustum centred on the player (snapped to 4 m so the shadow texels don't crawl)
   ctx.onUpdate(() => {
     const p = ctx.player && ctx.player.pos; if (!p) return;
@@ -47,5 +57,5 @@ export function buildSky(ctx, group) {
     if (tx !== focus.x || tz !== focus.z) { focus.set(tx, 0, tz); placeSun(); }
   });
 
-  return { sun, hemi, sky, sunDir, azimuth, altitude };
+  return { sun, hemi, sky, clouds, sunDir, azimuth, altitude };
 }

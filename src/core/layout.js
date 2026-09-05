@@ -258,8 +258,8 @@ export const ZONES = [
   { id: 'train', name: 'On the train', reverb: 'train' },
   { id: 'jubileePlatformUpper', name: 'Jubilee line — platform 3 (eastbound)', reverb: 'subsurface', box: jubZone(LEVELS.jubUpper) },
   { id: 'jubileePlatformLower', name: 'Jubilee line — platform 4 (westbound)', reverb: 'subsurface', box: jubZone(LEVELS.jubLower) },
-  { id: 'dcPlatform1', name: 'District & Circle lines — platform 1 (westbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: 1.9, tMax: 15, yMin: LEVELS.dcPlatform - 0.3, yMax: LEVELS.dcCeiling } },
-  { id: 'dcPlatform2', name: 'District & Circle lines — platform 2 (eastbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: -15, tMax: -1.9, yMin: LEVELS.dcPlatform - 0.3, yMax: LEVELS.dcCeiling } },
+  { id: 'dcPlatform1', name: 'District & Circle lines — platform 1 (westbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: 1.9, tMax: 15, yMin: LEVELS.dcPlatform + 0.3, yMax: LEVELS.dcCeiling } },   // (zone test point is 1 m above the feet)
+  { id: 'dcPlatform2', name: 'District & Circle lines — platform 2 (eastbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: -15, tMax: -1.9, yMin: LEVELS.dcPlatform + 0.3, yMax: LEVELS.dcCeiling } },
   { id: 'jubileeStairs', name: 'Jubilee line — emergency stairs', reverb: 'subsurface', box: { xMin: -64, xMax: -49, zMin: -3.5, zMax: 1.5, yMin: LEVELS.jubLower - 1, yMax: LEVELS.jubUpper + 3.5 } },
   { id: 'box', name: 'Jubilee line escalators', reverb: 'box', box: { xMin: -41, xMax: 45, zMin: -30, zMax: 16, yMin: LEVELS.boxFloor - 1, yMax: LEVELS.boxTop - 0.4 } },
   { id: 'ticketHall', name: 'Westminster — ticket hall', reverb: 'hall', box: { xMin: -53, xMax: 49, zMin: -41, zMax: 20, yMin: LEVELS.concourse - 0.6, yMax: LEVELS.concourseCeiling + 0.6 } },

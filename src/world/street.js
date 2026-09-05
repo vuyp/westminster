@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import * as layout from '../core/layout.js';
 import { makePlan } from './street/roads.js';
+import { Instancer } from './street/kit.js';
 
 const PARTS = [
   ['sky', './street/sky.js', 'buildSky'],
@@ -33,7 +34,8 @@ const PARTS = [
 export async function build(ctx) {
   const group = new THREE.Group(); group.name = 'street'; ctx.scene.add(group);
   const plan = makePlan(layout);
-  const state = { plan, parts: {}, floors: [], blockers: [], emitters: [], lights: 0 };
+  const late = new Instancer(group);   // instancers shared across parts (trees) — flushed once every part has added to them
+  const state = { plan, parts: {}, floors: [], blockers: [], emitters: [], lights: 0, late };
   for (const [name, path, fn] of PARTS) {
     const t0 = performance.now();
     try {
@@ -43,6 +45,7 @@ export async function build(ctx) {
       console.log(`[street] ${name} built in ${(performance.now() - t0).toFixed(0)} ms`);
     } catch (e) { console.warn(`[street] part '${name}' failed:`, e); state.parts[name] = null; }
   }
+  try { late.flush(); } catch (e) { console.warn('[street] late instancer flush failed', e); }
 
   // ---------------------------------------------------------------- nav graph + spawn points for the NPC module
   try {
@@ -58,7 +61,7 @@ export async function build(ctx) {
     const corner = [N('corner1', 70, 0, 2.4), N('corner2', 78, 0, 1.5)]; chain([id('n44'), N('embCrossW', 50, 0, 2.2), N('embCrossE', 63, 0, 2.2), ...corner]);
     const river = [-8, -20, -34, -50, -66, -90].map(z => N('river' + z, 79, 0, z)); chain([corner[1], ...river]);
     const embW = [-10, -30, -50, -70, -90].map(z => N('embW' + z, 43.5, 0, z)); chain([id('n44'), ...embW]);
-    const exit1 = N('exit1top', S.exit1.x + 1.5, 0, S.exit1.z - 2.4); E(exit1, id('river-20')); E(exit1, id('river-8'));
+    const exit1 = N('exit1top', S.exit1.x + 1.5, 0, S.exit1.z); E(exit1, id('river-20')); E(exit1, id('river-8'));
     const exit2 = N('exit2top', S.exit2.x + 2.2, 0, S.exit2.z); E(exit2, id('river-8')); E(exit2, corner[1]);
     const exit3 = N('exit3top', S.exit3.x, 0, S.exit3.z + 1.6); E(exit3, id('s50')); E(exit3, id('s40'));
     const bridgeN = [92, 110, 130].map(x => N('bridgeN' + x, x, 0.4, 2.2)); chain([corner[1], ...bridgeN]); const bridgeS = [92, 110, 130].map(x => N('bridgeS' + x, x, 0.4, 24)); chain([id('s80'), ...bridgeS]);
@@ -72,10 +75,11 @@ export async function build(ctx) {
 
   ctx.register('speakers:street', []);
   const api = {
-    group, plan, parts: state.parts,
+    group, plan, parts: state.parts, emitters: state.emitters,
     get sun() { return state.parts.sky && state.parts.sky.sun; },
     vehicles: state.parts.vehicles || null, signals: state.parts.vehicles && state.parts.vehicles.signals || null,
     clock: state.parts.tower && state.parts.tower.clock || null,
+    pigeons: state.pigeons || [],
   };
   ctx.register('street', api);
   if (state.parts.sky) ctx.register('street:sun', state.parts.sky);
