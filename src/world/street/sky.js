@@ -41,13 +41,24 @@ export function buildSky(ctx, group) {
   scene.fog = new THREE.Fog(0xcfd6dd, 320, 1550);
 
   // ---- a broken layer of stratocumulus at 700 m, drifting slowly from the south-west (bright London afternoon, not a clear sky)
+  // (a camera-centred dome whose fragment shader projects the tileable cloud texture onto a virtual plane at infinity and fades
+  //  it into the haze towards the horizon — no visible edge, one draw call, drawn at the far plane like the Sky itself)
   let clouds = null;
   try {
-    const tex = cloudTexture(ctx.T); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(2.2, 2.2);
-    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: true, opacity: 0.92 });
-    clouds = new THREE.Mesh(new THREE.PlaneGeometry(4200, 4200), mat); clouds.rotation.x = Math.PI / 2; clouds.position.set(0, 700, 0); clouds.frustumCulled = false; clouds.name = 'clouds'; clouds.renderOrder = -1;
+    const tex = cloudTexture(ctx.T); tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex }, offset: { value: new THREE.Vector2(0, 0) }, scale: { value: 0.37 }, tint: { value: new THREE.Color(0.96, 0.97, 1.0) }, opacity: { value: 0.9 } },
+      vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p; gl_Position.z = gl_Position.w; }',
+      fragmentShader: `uniform sampler2D map; uniform vec2 offset; uniform float scale; uniform vec3 tint; uniform float opacity; varying vec3 vDir;
+        void main() { float y = max(vDir.y, 0.0015); vec2 uv = vDir.xz / y * scale + offset; vec4 c = texture2D(map, uv); float fade = smoothstep(0.015, 0.16, vDir.y);
+          gl_FragColor = vec4(c.rgb * tint, c.a * fade * opacity);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, depthTest: true, side: THREE.BackSide, fog: false });
+    clouds = new THREE.Mesh(new THREE.SphereGeometry(900, 36, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), mat); clouds.frustumCulled = false; clouds.name = 'clouds'; clouds.renderOrder = -5;
     group.add(clouds);
-    ctx.onUpdate((dt) => { tex.offset.x += dt * 0.0011; tex.offset.y -= dt * 0.0007; });
+    ctx.onUpdate((dt) => { mat.uniforms.offset.value.x += dt * 0.0011; mat.uniforms.offset.value.y -= dt * 0.0007; if (ctx.camera) clouds.position.copy(ctx.camera.position); });
   } catch (e) { console.warn('[street] cloud layer failed', e); }
 
   // keep the shadow frustum centred on the player (snapped to 4 m so the shadow texels don't crawl)

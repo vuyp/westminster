@@ -73,7 +73,7 @@ export function buildPalace(ctx, group, plan, state) {
   const canopyA = canopyGeometry(3), canopyB = canopyGeometry(9); const leavesA = LI.set(canopyA, mats.leaf, { name: 'trees-a' }), leavesB = LI.set(canopyB, mats.leafLight, { name: 'trees-b' });
   const trunks = LI.set(new THREE.CylinderGeometry(0.22, 0.34, 1, 7).translate(0, 0.5, 0), mats.bark, { name: 'trunks' });
   const rnd = mulberry(17);
-  const tree = (x, z, h, s, wide = 1) => { trunks.add(x, 0, z, { sy: h, sx: 1 + s * 0.15, sz: 1 + s * 0.15 }); const set = rnd() < 0.5 ? leavesA : leavesB; set.add(x, h + s * 0.7, z, { ry: rnd() * 6.28, sx: s * wide, sy: s * 0.9, sz: s * wide }); };
+  const tree = (x, z, h, s, wide = 1) => { trunks.add(x, 0, z, { sy: h, sx: 1 + s * 0.15, sz: 1 + s * 0.15 }); const set = rnd() < 0.5 ? leavesA : leavesB; set.add(x, h + s * 0.7, z, { ry: rnd() * 6.28, sx: s * wide, sy: s * 0.9, sz: s * wide }); const r = 0.34 * (1 + s * 0.15); blk({ xMin: x - r, xMax: x + r, yMin: -0.5, yMax: h, zMin: z - r, zMax: z + r }, 'tree'); };
   for (let x = NPY.xMin + 8; x <= NPY.xMax - 6; x += 7.5) tree(x + (rnd() - 0.5), NPY.zMin + 3.2 + (rnd() - 0.5) * 0.4, 5.5 + rnd() * 1.5, 3.4 + rnd() * 0.8);
   for (let z = NPY.zMin + 10; z <= NPY.zMax - 6; z += 7.5) tree(NPY.xMin + 4 + (rnd() - 0.5), z, 5.5 + rnd() * 1.5, 3.2 + rnd() * 0.8);
   for (const [x, z] of [[-40, 56], [-14, 54], [2, 48]]) tree(x, z, 4.0, 4.8, 1.5);

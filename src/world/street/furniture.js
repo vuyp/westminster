@@ -39,7 +39,7 @@ export function buildFurniture(ctx, group, plan, state) {
     M.chunk('exits'); const L = rot(cx, cz, ry);
     const postProfile = [[0.16, 0], [0.16, 0.08], [0.09, 0.12], [0.08, 2.2], [0.11, 2.3], [0.08, 2.4], [0.07, 3.2], [0.1, 3.3], [0.05, 3.45]];
     for (const s of [-1, 1]) { const p = L(s * span / 2, 0, 0); M.lathe(mats.ironBlack, postProfile, 10, { x: p.x, y: 0, z: p.z }); M.sphere(mats.gilt, 0.07, { x: p.x, y: 3.5, z: p.z }); post(p.x, p.z, 0.2, 3.5, 'exitCanopyPost'); }
-    const archMat = signMat(ctx, subwayArchTexture(T, { toilets, w: span, h: 0.7 }), { emissive: 0.35 });
+    const key = 'archMat:' + toilets; const archMat = mats[key] || (mats[key] = signMat(ctx, subwayArchTexture(T, { toilets, w: 4.4, h: 0.7 }), { emissive: 0.35 }));
     M.add(mats.ironBlack, new THREE.BoxGeometry(span + 0.1, 0.8, 0.08).translate(0, 2.75, 0), { x: cx, y: 0, z: cz, ry });
     M.add(archMat, new THREE.PlaneGeometry(span - 0.1, 0.7).translate(0, 2.75, 0.045), { x: cx, y: 0, z: cz, ry });
     M.add(archMat, new THREE.PlaneGeometry(span - 0.1, 0.7).rotateY(Math.PI).translate(0, 2.75, -0.045), { x: cx, y: 0, z: cz, ry });
@@ -94,14 +94,17 @@ export function buildFurniture(ctx, group, plan, state) {
       if (!e.simple) archCanopy(cx, cz, w + 0.7, ry, { toilets: e.toilets });
       else { // Exit 1: plain steel handrail posts and a small arch-less sign board
         M.chunk('exits'); for (const s of [-1, 1]) { const p = rot(cx, cz, ry)(s * (w / 2 + 0.2), 0, 0); M.cyl(mats.ironBlack, 0.05, 0.06, 2.6, 8, { x: p.x, y: 1.3, z: p.z }); post(p.x, p.z, 0.12, 2.6, tag + ':post'); }
-        M.add(signMat(ctx, subwayArchTexture(T, { toilets: false, w: w + 0.5, h: 0.6 }), { emissive: 0.35 }), new THREE.PlaneGeometry(w + 0.4, 0.55).translate(0, 2.35, 0.03), { x: cx, y: 0, z: cz, ry });
-        M.add(mats.ironBlack, new THREE.BoxGeometry(w + 0.5, 0.62, 0.05).translate(0, 2.35, 0), { x: cx, y: 0, z: cz, ry });
+        const boardMat = signMat(ctx, subwayArchTexture(T, { toilets: false, w: w + 0.5, h: 0.6 }), { emissive: 0.35 });
+        M.add(boardMat, new THREE.PlaneGeometry(w + 0.4, 0.55).translate(0, 2.35, 0.041), { x: cx, y: 0, z: cz, ry });
+        M.add(boardMat, new THREE.PlaneGeometry(w + 0.4, 0.55).rotateY(Math.PI).translate(0, 2.35, -0.041), { x: cx, y: 0, z: cz, ry });
+        M.add(mats.ironBlack, new THREE.BoxGeometry(w + 0.5, 0.62, 0.06).translate(0, 2.35, 0), { x: cx, y: 0, z: cz, ry });
+        M.add(mats.ironBlack, new THREE.BoxGeometry(w + 0.5, 0.05, 0.05).translate(0, 2.7, 0), { x: cx, y: 0, z: cz, ry });
       }
       const side = e.top === 'east' ? { x: tr.xMax + 0.7, z: tr.zMax + 1.0 } : { x: tr.xMax + 1.0, z: tr.zMax + 0.7 };
       roundelBox(side.x, side.z, ry);
       // exit panel (roundel + 'Westminster' + exit number) and the destinations panel on the roundel pole
       const panel = signMat(ctx, bluePanel(T, ['Westminster', `Exit ${e.n}  ${e.name}`], { width: 1024, height: 320, roundel: true }), { emissive: 0.6 });
-      const dest = signMat(ctx, T.sign({ width: 1024, height: 512, bg: '#113b92', lines: [{ text: 'Subway to', size: 60, weight: 'normal' }, { text: 'Westminster Station', size: 78 }, { text: 'Houses of Parliament', size: 60, weight: 'normal' }, { text: 'Westminster Abbey  ·  Whitehall', size: 52, weight: 'normal' }, { text: 'Westminster Pier  ·  London Eye', size: 52, weight: 'normal' }] }), { emissive: 0.55 });
+      const dest = mats.destPanel || (mats.destPanel = signMat(ctx, T.sign({ width: 1024, height: 512, bg: '#113b92', lines: [{ text: 'Subway to', size: 60, weight: 'normal' }, { text: 'Westminster Station', size: 78 }, { text: 'Houses of Parliament', size: 60, weight: 'normal' }, { text: 'Westminster Abbey  ·  Whitehall', size: 52, weight: 'normal' }, { text: 'Westminster Pier  ·  London Eye', size: 52, weight: 'normal' }] }), { emissive: 0.55 }));
       M.chunk('exits');
       M.add(panel, new THREE.PlaneGeometry(1.1, 0.34).translate(0, 2.3, 0.05), { x: side.x, y: 0, z: side.z, ry }); M.add(panel, new THREE.PlaneGeometry(1.1, 0.34).rotateY(Math.PI).translate(0, 2.3, -0.05), { x: side.x, y: 0, z: side.z, ry });
       M.add(dest, new THREE.PlaneGeometry(0.9, 0.45).translate(0, 1.75, 0.05), { x: side.x, y: 0, z: side.z, ry }); M.add(dest, new THREE.PlaneGeometry(0.9, 0.45).rotateY(Math.PI).translate(0, 1.75, -0.05), { x: side.x, y: 0, z: side.z, ry });

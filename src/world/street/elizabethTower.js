@@ -53,15 +53,17 @@ export function buildElizabethTower(ctx, group, plan, state) {
   const handGeo = (len, wid) => { const g = new THREE.BoxGeometry(wid, len, 0.08); g.translate(0, len / 2 - len * 0.12, 0); return g; };
   const faces = []; const faceDefs = [[0, 0, 1, 'south'], [Math.PI / 2, 1, 0, 'east'], [Math.PI, 0, -1, 'north'], [-Math.PI / 2, -1, 0, 'west']];
   for (const [ry, ox, oz, name] of faceDefs) {
-    const f = new THREE.Group(); f.position.set(ox * (CW / 2), CLOCK, oz * (CW / 2)); f.rotation.y = ry; tower.add(f);
-    const surround = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), surroundMat); surround.position.z = 0.02; f.add(surround);
-    const dial = new THREE.Mesh(new THREE.CircleGeometry(3.45, 64), dialMat); dial.position.z = 0.09; f.add(dial);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(3.52, 0.13, 10, 64), mats.prussian); ring.position.z = 0.1; f.add(ring);
-    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(3.7, 0.07, 8, 64), mats.gilt); ring2.position.z = 0.06; f.add(ring2);
-    const hour = new THREE.Mesh(handGeo(2.7, 0.26), mats.prussian); hour.position.z = 0.18; f.add(hour);
-    const minute = new THREE.Mesh(handGeo(4.3, 0.18), mats.prussian); minute.position.z = 0.26; f.add(minute);
-    const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.1, 16).rotateX(Math.PI / 2), mats.gilt); boss.position.z = 0.3; f.add(boss);
-    const inscription = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 0.8), latinMat); inscription.position.set(0, -5.1, 0.04); f.add(inscription);
+    // the static parts of each face are merged into the tower (one mesh per material); only the hands stay as meshes
+    const pose = { x: ox * (CW / 2), y: CLOCK, z: oz * (CW / 2), ry };
+    M.add(surroundMat, new THREE.PlaneGeometry(11, 11).translate(0, 0, 0.02), pose);
+    M.add(dialMat, new THREE.CircleGeometry(3.45, 64).translate(0, 0, 0.09), pose);
+    M.add(mats.prussian, new THREE.TorusGeometry(3.52, 0.13, 10, 64).translate(0, 0, 0.1), pose);
+    M.add(mats.gilt, new THREE.TorusGeometry(3.7, 0.07, 8, 64).translate(0, 0, 0.06), pose);
+    M.add(mats.gilt, new THREE.CylinderGeometry(0.22, 0.22, 0.1, 16).rotateX(Math.PI / 2).translate(0, 0, 0.3), pose);
+    M.add(latinMat, new THREE.PlaneGeometry(10.4, 0.8).translate(0, -5.1, 0.04), pose);
+    const f = new THREE.Group(); f.position.set(pose.x, pose.y, pose.z); f.rotation.y = ry; tower.add(f);
+    const hour = new THREE.Mesh(handGeo(2.7, 0.26), mats.prussian); hour.position.z = 0.18; hour.castShadow = false; f.add(hour);
+    const minute = new THREE.Mesh(handGeo(4.3, 0.18), mats.prussian); minute.position.z = 0.26; minute.castShadow = false; f.add(minute);
     faces.push({ name, group: f, hour, minute });
   }
   // gilt ornament at the corners of the clock stage + small pinnacles on the cornice

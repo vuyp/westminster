@@ -28,7 +28,7 @@ export function buildBridge(ctx, group, plan, state) {
   M.chunk('deck');
   ribbon(mats.tarmac, ROAD_Z0, ROAD_Z1, -KERB); ribbon(mats.paving, Z0, ROAD_Z0, 0); ribbon(mats.paving, ROAD_Z1, Z1, 0);
   // kerbs, deck slab (green iron fascia), markings
-  for (let x = X0; x < X1; x += 5) { const xm = x + 2.5, y = deckY(xm); M.box(mats.kerb, 5.02, 0.17, 0.3, { x: xm, y: y - 0.08, z: ROAD_Z0 + 0.15 }); M.box(mats.kerb, 5.02, 0.17, 0.3, { x: xm, y: y - 0.08, z: ROAD_Z1 - 0.15 }); M.box(mats.ironGreen, 5.05, 1.1, Z1 - Z0 + 1.0, { x: xm, y: y - 0.72, z: (Z0 + Z1) / 2 }); }
+  for (let x = X0; x < X1; x += 5) { const xm = x + 2.5, y = deckY(xm); M.box(mats.kerb, 5.02, 0.17, 0.3, { x: xm, y: y - 0.08, z: ROAD_Z0 + 0.15 }); M.box(mats.kerb, 5.02, 0.17, 0.3, { x: xm, y: y - 0.08, z: ROAD_Z1 - 0.15 }); M.box(mats.ironGreen, 5.05, 0.7, Z1 - Z0 + 1.0, { x: xm, y: y - 0.85, z: (Z0 + Z1) / 2 }); }   // the green deck fascia stays 0.35 m below the tarmac (no z-fighting at distance)
   const MY = -KERB + 0.004;
   for (let x = X0 + 2; x < X1 - 2; x += 6) M.box(mats.whiteLine, 4, 0.006, 0.1, { x: x + 2, y: deckY(x + 2) + MY, z: (ROAD_Z0 + ROAD_Z1) / 2 });
   for (let x = X0 + 2; x < X1 - 2; x += 9) { M.box(mats.whiteLine, 2, 0.006, 0.1, { x: x + 1, y: deckY(x + 1) + MY, z: ROAD_Z0 + 5.8 + 3.6 }); M.box(mats.whiteLine, 2, 0.006, 0.1, { x: x + 1, y: deckY(x + 1) + MY, z: ROAD_Z1 - 5.8 - 3.6 }); }

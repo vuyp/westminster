@@ -139,7 +139,8 @@ function dolphinLampGeometry() {
 /** Thames river bus: black hull, white superstructure, dark window band. Local -z forward, water line at y = 0. */
 function riverBus(mats) {
   const g = new THREE.Group(); const M = new Merger(g, 'boat');
-  M.box(mats.busBlack, 7.2, 1.6, 34, { x: 0, y: 0.5, z: 0 }); M.add(mats.busBlack, new THREE.ConeGeometry(3.6, 6, 4).rotateX(-Math.PI / 2).rotateZ(Math.PI / 4), { x: 0, y: 0.5, z: -20, sy: 0.27 });
+  M.box(mats.busBlack, 7.2, 1.6, 34, { x: 0, y: 0.5, z: 0 });
+  { const bow = new THREE.Shape(); bow.moveTo(-3.6, 0); bow.lineTo(3.6, 0); bow.lineTo(0.6, -5.5); bow.lineTo(-0.6, -5.5); bow.closePath(); const bg = new THREE.ExtrudeGeometry(bow, { depth: 1.6, bevelEnabled: false }); bg.rotateX(Math.PI / 2); bg.translate(0, 1.3, -17); M.add(mats.busBlack, bg); M.box(mats.white, 5.4, 0.12, 4.0, { x: 0, y: 1.36, z: -18.5 }); }
   M.box(mats.white, 6.4, 2.2, 24, { x: 0, y: 2.4, z: 1 }); M.box(mats.glassDark, 6.5, 0.9, 22, { x: 0, y: 2.6, z: 1 }); M.box(mats.white, 5.0, 1.2, 7, { x: 0, y: 4.1, z: -6 }); M.box(mats.glassDark, 5.1, 0.6, 6, { x: 0, y: 4.2, z: -6 });
   M.box(mats.red, 0.5, 0.5, 0.5, { x: 0, y: 4.9, z: -8 }); M.cyl(mats.steelGrey, 0.05, 0.05, 3, 6, { x: 0, y: 6, z: 8 });
   M.flush({ castShadow: false }); return g;

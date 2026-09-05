@@ -454,7 +454,7 @@ export function makeMaterials(ctx) {
     white: paint(0xf2f2ee, 0.6, 0), whiteLine: paint(0xf4f4f0, 0.5, 0), yellowLine: paint(0xe9c53a, 0.55, 0), redRoute: paint(0xc9302c, 0.6, 0), busLaneRed: paint(0x6b3b34, 0.98, 0), greenCycle: paint(0x3f8a5a, 0.9, 0),
     red: paint(COL.busRed, 0.4, 0.15), busBlack: paint(0x151515, 0.35, 0.3), cabBlack: paint(COL.cab, 0.3, 0.4), tyre: paint(0x141414, 0.9, 0), chrome: M.stainless(), signGrey: paint(0x8a8d90, 0.5, 0.3),
     bronzeStatue: paint(COL.boadiceaBronze, 0.55, 0.6), coade: M.portland({ color: COL.coade, courseH: 0.3, blockW: 0.6, weathering: 0.3 }), copper: paint(COL.copper, 0.7, 0.3), eyeWhite: paint(COL.eyeWhite, 0.4, 0.3), eyeGlass: paint(0x9fb6c4, 0.15, 0.6),
-    grass: grassMat, leaf: paint(0x3a5f27, 0.95, 0), leafLight: paint(0x5a8a36, 0.95, 0), bark: paint(COL.bark, 0.95, 0), grate: grateMat, concrete: M.precast(), mud: paint(0x5c5546, 0.95, 0),
+    grass: grassMat, leaf: paint(0x3b5a2c, 0.95, 0), leafLight: paint(0x527539, 0.95, 0), bark: paint(COL.bark, 0.95, 0), grate: grateMat, concrete: M.precast(), mud: paint(0x5c5546, 0.95, 0),
     lumWarm: M.luminaire(0xfff0d0, 1.6), lumWhite: M.luminaire(0xffffff, 1.2), lumDial: M.luminaire(0xfff6e0, 0.35), lumOrange: M.luminaire(0xffa020, 2.5), lumRed: M.luminaire(0xff2010, 2.5), lumGreen: M.luminaire(0x20ff60, 2.5), lumAmber: M.luminaire(0xffb300, 2.5), lumOff: paint(0x2a2a2a, 0.5, 0.2),
     ledGlobe: M.luminaire(COL.globe, 0.5), dark: paint(0x1e1f21, 0.8, 0.1), blue: paint(0x0019a8, 0.6, 0), tfLBlue: paint(0x113b92, 0.6, 0), plastic: paint(0xdcdcd6, 0.6, 0), kioskRed: paint(0xb0201c, 0.5, 0.1),
   };
@@ -500,7 +500,7 @@ export function cloudTexture(T, { size = 1024, seed = 91, cover = 0.55 } = {}) {
 export function k6Texture(T, { ppm = 160 } = {}) {
   const w = Math.round(0.92 * ppm), h = Math.round(2.4 * ppm); const c = T.canvas(w, h); const ctx = c.getContext('2d');
   ctx.fillStyle = '#b3181c'; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#111'; ctx.fillRect(0.06 * ppm, 0.12 * ppm, w - 0.12 * ppm, 0.28 * ppm); ctx.fillStyle = '#f4f4f0'; ctx.font = `bold ${0.16 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TELEPHONE', w / 2, 0.26 * ppm);
+  ctx.fillStyle = '#111'; ctx.fillRect(0.06 * ppm, 0.12 * ppm, w - 0.12 * ppm, 0.28 * ppm); ctx.fillStyle = '#f4f4f0'; ctx.font = `bold ${0.115 * ppm}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('TELEPHONE', w / 2, 0.26 * ppm);
   const cols = 3, rows = 6, x0 = 0.09 * ppm, y0 = 0.5 * ppm, gw = (w - 2 * x0) / cols, gh = (h - y0 - 0.35 * ppm) / rows;
   for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) { const x = x0 + k * gw, y = y0 + r * gh; const g = ctx.createLinearGradient(x, y, x, y + gh); g.addColorStop(0, '#6c7c86'); g.addColorStop(1, '#2d383f'); ctx.fillStyle = g; ctx.fillRect(x + 0.02 * ppm, y + 0.02 * ppm, gw - 0.04 * ppm, gh - 0.04 * ppm); }
   ctx.fillStyle = '#8f1216'; ctx.fillRect(0, h - 0.3 * ppm, w, 0.3 * ppm);

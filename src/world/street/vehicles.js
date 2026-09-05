@@ -9,6 +9,7 @@
 // material per fleet. Eastbound traffic (+x) uses the NORTH lanes, westbound the SOUTH lanes (left-hand rule).
 // ---------------------------------------------------------------------------
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Merger, makeMaterials, signMat, busSideTexture, busFrontTexture, busRearTexture, cabSideTexture, cabEndTexture, carSideTexture, carEndTexture, carCabinTexture, blindTexture, signalHousingTexture, mulberry } from './kit.js';
 
 export function buildVehicles(ctx, group, plan, state) {
@@ -108,26 +109,34 @@ export function buildVehicles(ctx, group, plan, state) {
     fleets.push(f); return f;
   }
   const bodyMats = (side, front, rear, roof, under) => [faceMat(side.off), faceMat(side.near), roof, under, faceMat(rear), faceMat(front)];   // [+x offside, -x nearside, +y, -y, +z rear, -z front]
+  /** Merge several indexed geometries into one, re-mapping each part's material groups → one InstancedMesh with a material array (one draw call per material). */
+  function mergeGrouped(parts) {
+    const merged = mergeGeometries(parts.map(p => p.geo), false); merged.clearGroups(); let offset = 0;
+    for (const p of parts) { const n = p.geo.index ? p.geo.index.count : p.geo.attributes.position.count; const groups = p.geo.groups.length ? p.geo.groups : [{ start: 0, count: n, materialIndex: 0 }]; for (const g of groups) merged.addGroup(offset + g.start, g.count, p.mat(g.materialIndex)); offset += n; }
+    return merged;
+  }
   const busBodyGeo = new THREE.BoxGeometry(BUS.w, BUS.h, BUS.len).translate(0, BUS.h / 2, 0);
   const busRoofGeo = new THREE.CylinderGeometry(BUS.w / 2 - 0.02, BUS.w / 2 - 0.02, BUS.len - 0.1, 16, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2); busRoofGeo.scale(1, 0.22, 1); busRoofGeo.translate(0, BUS.h - 0.01, 0);
+  const busGeo = mergeGrouped([{ geo: busBodyGeo, mat: i => i }, { geo: busRoofGeo, mat: () => 2 }]);
   const busRoof = paint(0x9e1a14, 0.55, 0.15), under = paint(0x151515, 0.9, 0.1);
-  const busFleet = (route) => makeFleet('bus' + route, BUS, [
-    { name: 'body', geo: busBodyGeo, mat: bodyMats({ off: busSideTexture(T, { nearside: false, route }), near: busSideTexture(T, { nearside: true, route }) }, busFrontTexture(T), busRearTexture(T, { route }), busRoof, under) },
-    { name: 'roof', geo: busRoofGeo, mat: busRoof },
-  ], 3);
+  const busFleet = (route, count) => makeFleet('bus' + route, BUS, [
+    { name: 'body', geo: busGeo, mat: bodyMats({ off: busSideTexture(T, { nearside: false, route }), near: busSideTexture(T, { nearside: true, route }) }, busFrontTexture(T), busRearTexture(T, { route }), busRoof, under) },
+  ], count);
   const cabBodyGeo = new THREE.BoxGeometry(CAB.w, CAB.h, CAB.len).translate(0, CAB.h / 2, 0);
   const cabRoofGeo = new THREE.CylinderGeometry(CAB.w / 2 - 0.02, CAB.w / 2 - 0.02, CAB.len - 1.6, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2); cabRoofGeo.scale(1, 0.18, 1); cabRoofGeo.translate(0, CAB.h - 0.01, 0.2);
   const taxiLight = new THREE.MeshStandardMaterial({ color: 0xffe27a, emissive: 0xffd24a, emissiveIntensity: 0.9, roughness: 0.4 });
+  const cabGeo = mergeGrouped([{ geo: cabBodyGeo, mat: i => i }, { geo: cabRoofGeo, mat: () => 2 }, { geo: new THREE.BoxGeometry(0.5, 0.12, 0.18).translate(0, CAB.h + 0.06, -0.6), mat: () => 6 }]);
   const cabFleet = makeFleet('cab', CAB, [
-    { name: 'body', geo: cabBodyGeo, mat: bodyMats({ off: cabSideTexture(T, { nearside: false }), near: cabSideTexture(T, { nearside: true }) }, cabEndTexture(T), cabEndTexture(T, { rear: true }), mats.cabBlack, under) },
-    { name: 'roof', geo: cabRoofGeo, mat: mats.cabBlack },
-    { name: 'taxi', geo: new THREE.BoxGeometry(0.5, 0.12, 0.18).translate(0, CAB.h + 0.06, -0.6), mat: taxiLight },
+    { name: 'body', geo: cabGeo, mat: [...bodyMats({ off: cabSideTexture(T, { nearside: false }), near: cabSideTexture(T, { nearside: true }) }, cabEndTexture(T), cabEndTexture(T, { rear: true }), mats.cabBlack, under), taxiLight] },
   ], 5);
-  const carFleet = (paintHex, name) => { const pm = paint(paintHex, 0.35, 0.4); const cabin = faceMat(carCabinTexture(T), { roughness: 0.15, metalness: 0.6 }); return makeFleet(name, CAR, [
-    { name: 'body', geo: new THREE.BoxGeometry(CAR.w, CAR.h, CAR.len).translate(0, CAR.h / 2, 0), mat: bodyMats({ off: carSideTexture(T, { paint: '#' + paintHex.toString(16).padStart(6, '0'), nearside: false }), near: carSideTexture(T, { paint: '#' + paintHex.toString(16).padStart(6, '0'), nearside: true }) }, carEndTexture(T, { paint: '#' + paintHex.toString(16).padStart(6, '0') }), carEndTexture(T, { paint: '#' + paintHex.toString(16).padStart(6, '0'), rear: true }), pm, under) },
-    { name: 'cabin', geo: new THREE.BoxGeometry(CAR.w - 0.12, 0.55, 2.3).translate(0, CAR.h + 0.27, 0.05), mat: [cabin, cabin, pm, pm, cabin, cabin] },
-  ], 2); };
-  const bus11 = busFleet('11'), bus159 = busFleet('159'); const carSilver = carFleet(0xc4c6c9, 'carSilver'), carBlue = carFleet(0x2b4a7a, 'carBlue');
+  // cars: one fleet, white-painted textures tinted per instance with instanceColor
+  const carPaint = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.4 }); const cabin = faceMat(carCabinTexture(T), { roughness: 0.15, metalness: 0.6 });
+  const carGeo = mergeGrouped([{ geo: new THREE.BoxGeometry(CAR.w, CAR.h, CAR.len).translate(0, CAR.h / 2, 0), mat: i => i }, { geo: new THREE.BoxGeometry(CAR.w - 0.12, 0.55, 2.3).translate(0, CAR.h + 0.27, 0.05), mat: i => (i === 2 ? 2 : i === 3 ? 3 : 6) }]);
+  const carFleet = makeFleet('car', CAR, [
+    { name: 'body', geo: carGeo, mat: [...bodyMats({ off: carSideTexture(T, { paint: '#ffffff', nearside: false }), near: carSideTexture(T, { paint: '#ffffff', nearside: true }) }, carEndTexture(T, { paint: '#ffffff' }), carEndTexture(T, { paint: '#ffffff', rear: true }), carPaint, under), cabin] },
+  ], 4);
+  const CAR_COLOURS = [0xc4c6c9, 0x2b4a7a, 0xf2f2ee, 0x6e1a1e];
+  const bus11 = busFleet('11', 3), bus159 = busFleet('159', 2);
 
   // destination blinds (per bus, direction-aware)
   const blindMat = (text) => signMat(ctx, blindTexture(T, text, { w: 512, h: 128 }), { emissive: 1.1 });
@@ -147,7 +156,10 @@ export function buildVehicles(ctx, group, plan, state) {
   addVehicle(bus11, LA_bus, 40, { route: '11', stopsAtH: true }); addVehicle(bus11, LA_bus, LA_bus.len * 0.55, { route: '11', stopsAtH: true }); addVehicle(bus11, LA_bus, LA_bus.len * 0.3, { route: '11', stopsAtH: true });
   addVehicle(bus159, LB_bus, 120, { route: '159' }); addVehicle(bus159, LB_bus, LB_bus.len * 0.6, { route: '159' });
   addVehicle(cabFleet, LA_car, 15); addVehicle(cabFleet, LA_car, LA_car.len * 0.72); addVehicle(cabFleet, LB_car, 300); addVehicle(cabFleet, LC, 380); addVehicle(cabFleet, LC, LC.len * 0.5);
-  addVehicle(carSilver, LA_car, LA_car.len * 0.42, { engine: false }); addVehicle(carSilver, LC, 150, { engine: false }); addVehicle(carBlue, LB_car, LB_car.len * 0.25, { engine: false }); addVehicle(carBlue, LA_car, LA_car.len * 0.88, { engine: false });
+  addVehicle(carFleet, LA_car, LA_car.len * 0.42, { engine: false }); addVehicle(carFleet, LC, 150, { engine: false }); addVehicle(carFleet, LB_car, LB_car.len * 0.25, { engine: false }); addVehicle(carFleet, LA_car, LA_car.len * 0.88, { engine: false });
+  carFleet.vehicles.forEach((v, i) => { const c = new THREE.Color(CAR_COLOURS[i % CAR_COLOURS.length]); for (const im of carFleet.meshes) im.setColorAt(v.idx, c); });
+  // unused fleet slots must not render at the identity matrix (a bus standing in the arcade): trim every fleet to the vehicles it got
+  for (const f of fleets) { for (const im of f.meshes) im.count = f.used; f.wheels.count = f.used * 4; f.hubs.count = f.used * 4; }
 
   // stop lines: { group, axis, dir (direction of travel along the axis), line, band: [min,max] of the other coordinate }
   const cx = P.crossings.pelicanX;
@@ -173,7 +185,7 @@ export function buildVehicles(ctx, group, plan, state) {
       // stop lines
       for (const st of STOPS) { const sig = signals.get(st.group); if (sig === 'green') continue; const heading = st.axis === 'x' ? v.tan.x * st.dir : v.tan.z * st.dir; if (heading < 0.7) continue; const other = st.axis === 'x' ? v.pos.z : v.pos.x; if (other < st.band[0] - 1 || other > st.band[1] + 1) continue; const coord = st.axis === 'x' ? v.pos.x : v.pos.z; const d = (st.line - coord) * st.dir - front; if (d < -0.3 || d > 45) continue; if (sig === 'amber' && d < 6 && v.speed > 4) continue; consider(d); }
       // the bus stop (route 11 eastbound only)
-      if (v.stopsAtH) { if (v.tan.x > 0.9 && v.pos.x > -70 && v.pos.x < BUS_STOP_X + 2 && !v.served) { const d = BUS_STOP_X - (v.pos.x + front); if (d > -0.3) { consider(d); if (d < 0.4 && v.speed < 0.05) { v.dwell += dt; if (v.dwell > 12) { v.served = true; } } } } if (v.pos.x > BUS_STOP_X + 40 || v.pos.x < -75) { v.served = false; v.dwell = 0; } }
+      if (v.stopsAtH) { if (v.tan.x > 0.9 && v.pos.x > -70 && v.pos.x < BUS_STOP_X + 2 && !v.served) { const d = BUS_STOP_X - (v.pos.x + front); if (d > -0.3) { consider(d); if (d < 2.4 && v.speed < 0.05) { v.dwell += dt; if (v.dwell > 12) { v.served = true; } } } } if (v.pos.x > BUS_STOP_X + 40 || v.pos.x < -75) { v.served = false; v.dwell = 0; } }
       // slow on the gyratory and the tight turnarounds
       if (v.pos.x < -84 || v.hidden) limit = Math.min(limit, 7);
       const target = Math.max(0, limit);
