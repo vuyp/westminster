@@ -9,7 +9,7 @@ import { launch } from './browser.mjs';
 import { ROUTE } from './route.mjs';
 
 const argv = process.argv.slice(2); const opt = {}; for (let i = 0; i < argv.length; i++) if (argv[i].startsWith('--')) opt[argv[i].slice(2)] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : '1';
-// --extra "dev=dev/trainServiceTest&skip=trainService"  --steps board-jubilee,ride-jubilee   --list
+// --extra "dev=dev/trainServiceTest&skip=trainService"  --steps board-jubilee,ride-jubilee   --list   --noshots (logic only)   --shotTimeout ms
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (opt.list) { console.log(ROUTE.map(s => s.name).join('\n')); process.exit(0); }
 const steps = opt.steps ? ROUTE.filter(s => opt.steps.split(',').includes(s.name)) : ROUTE;
@@ -36,7 +36,8 @@ try {
     if (step.walk) { await page.keyboard.down('KeyW'); await page.evaluate(s => window.__app.advance(s), step.walk); await page.keyboard.up('KeyW'); await page.evaluate(() => window.__app.advance(0.2)); }
     if (step.advance) await page.evaluate(s => window.__app.advance(s), step.advance);
     await page.waitForTimeout(300);
-    const file = path.join(outdir, `${String(ROUTE.indexOf(step) + 1).padStart(2, '0')}-${step.name}.png`); await page.screenshot({ path: file, timeout: 300000 });
+    const file = path.join(outdir, `${String(ROUTE.indexOf(step) + 1).padStart(2, '0')}-${step.name}.png`);
+    if (!opt.noshots) { try { await page.screenshot({ path: file, timeout: Number(opt.shotTimeout || 300000) }); } catch (e) { console.log(`  (screenshot skipped: ${String(e.message).split('\n')[0]})`); } }
     const pos = await page.evaluate(() => { const p = window.__app.player; return { x: +p.pos.x.toFixed(2), y: +p.pos.y.toFixed(2), z: +p.pos.z.toFixed(2), zone: p.zone && p.zone.id, grounded: p.grounded, train: !!p.train }; });
     console.log(`${step.name.padEnd(22)} pos=${JSON.stringify(pos)}`);
     if (step.expectZone && pos.zone !== step.expectZone) { console.log(`  !! expected zone ${step.expectZone}`); failed = true; }
