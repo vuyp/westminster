@@ -404,7 +404,11 @@ export function glassScreen(merger, mats, collision, a, b, y, { height = 1.8, ba
   if (kick) merger.box(mats.stainless, len, 0.06, 0.04, { x: mid.x, y: y + 0.03, z: mid.z, ry: yaw }, false);
   if (band) merger.box(mats.mosaic, len, 0.12, 0.016, { x: mid.x, y: y + 1.1, z: mid.z, ry: yaw }, false);
   const n = Math.max(1, Math.round(len / post)); for (let i = 0; i <= n; i++) { const t = i / n; merger.box(mats.stainless, 0.05, height, 0.05, { x: a.x + (b.x - a.x) * t, y: y + height / 2, z: a.z + (b.z - a.z) * t, ry: yaw }, false); }
-  collision.addBlocker({ xMin: Math.min(a.x, b.x) - 0.06, xMax: Math.max(a.x, b.x) + 0.06, yMin: y, yMax: y + height, zMin: Math.min(a.z, b.z) - 0.06, zMax: Math.max(a.z, b.z) + 0.06 }, tag);
+  { // collision: segmented along the screen so a diagonal screen's boxes hug the glass instead of one huge AABB
+    const len = Math.hypot(b.x - a.x, b.z - a.z); const n = Math.max(1, Math.ceil(len / 0.5));
+    for (let i = 0; i < n; i++) { const t0 = i / n, t1 = (i + 1) / n; const x0 = a.x + (b.x - a.x) * t0, x1 = a.x + (b.x - a.x) * t1, z0 = a.z + (b.z - a.z) * t0, z1 = a.z + (b.z - a.z) * t1;
+      collision.addBlocker({ xMin: Math.min(x0, x1) - 0.06, xMax: Math.max(x0, x1) + 0.06, yMin: y, yMax: y + height, zMin: Math.min(z0, z1) - 0.06, zMax: Math.max(z0, z1) + 0.06 }, tag); }
+  }
 }
 
 /** Stainless tubular handrail from a to b (world Vector3, at hand height already) with 300 mm returns and wall brackets every 1.5 m. */

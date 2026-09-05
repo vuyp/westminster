@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { Merger, glassScreen, wallSign } from '../world/ticketHallKit.js';
 
-const CAB_L = 1.9, CAB_W = 0.3, CAB_H = 1.0, AISLE = 0.6, WIDE_AISLE = 0.95;
+const CAB_L = 1.9, CAB_W = 0.3, CAB_H = 1.0, AISLE = 0.7, WIDE_AISLE = 1.0;
 const OPEN_SECONDS = 5.0;
 
 export function createGateline(ctx, opts) {
@@ -89,9 +89,9 @@ export function createGateline(ctx, opts) {
       leaves.push({ hinge, side: s });
     }
     // collision: cabinet blockers inset (aisle clearance for the 0.33 m player capsule) and segmented (rotated AABBs), plus a paddle blocker
-    const seg = 5; const inset = 0.18;
+    const seg = 8; const inset = 0.12;   // fine segments keep the rotated AABBs out of the aisle; blockers end at the cabinet face (never into the neighbouring aisle)
     for (const s of [-1, 1]) for (let k = 0; k < seg; k++) {
-      const z0 = -CAB_L / 2 + (CAB_L / seg) * k, z1 = z0 + CAB_L / seg; const x0 = s * (aisle / 2 + inset), x1 = s * (aisle / 2 + CAB_W + 0.4);
+      const z0 = -CAB_L / 2 + (CAB_L / seg) * k, z1 = z0 + CAB_L / seg; const x0 = s * (aisle / 2 + inset), x1 = s * (aisle / 2 + CAB_W + 0.02);
       const pts = [[x0, z0], [x1, z0], [x0, z1], [x1, z1]].map(([lx, lz]) => g.localToWorld(new THREE.Vector3(lx, 0, lz)));
       const bb = new THREE.Box3().setFromPoints(pts); bb.min.y = y; bb.max.y = y + CAB_H; collision.addBlocker(bb, 'gate:cabinet');
     }

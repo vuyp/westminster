@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { ZONES, SPAWN, worldToDc } from '../core/layout.js';
 
-const EYE = 1.68, RADIUS = 0.33, HEIGHT = 1.78, WALK = 2.1, RUN = 4.2, STEP_UP = 0.42, GRAVITY = 18;
+const EYE = 1.68, RADIUS = 0.29, HEIGHT = 1.78, WALK = 2.1, RUN = 4.2, STEP_UP = 0.42, GRAVITY = 18;
 
 export class Player {
   constructor({ camera, collision, audio, hud, ctx, domElement, noLock = false }) {

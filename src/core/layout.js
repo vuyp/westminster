@@ -102,7 +102,7 @@ export const TICKET_HALL = {
   cashMachines: { x: -45, zMin: -38, zMax: -34, count: 4, facing: 'east' },   // west wall, north of the former ticket windows
   payphones: { x: 20, z: 11, count: 4 },
   // Gateline: runs NW–SE across the middle of the hall. Paid side is to the NORTH-EAST of the line.
-  gateline: { from: [-13, -26], to: [0, -21], gates: 15, wideGateIndex: 0, boothAt: 'se' },   // c. 14 m for 15 gates
+  gateline: { from: [-16, -27], to: [3, -20], gates: 15, wideGateIndex: 0, boothAt: 'se' },   // c. 20 m for 15 gates (1.35 m pitch: 0.7 m aisle + two 0.3 m cabinets)
   // Bank (a) escalators leave the paid side from the east end of its south side (see ESCALATORS)
   // Openings in the concourse floor for the D&C stairs are given in DISTRICT.stairs (world rects precomputed below)
   embankmentPassage: { xFrom: 48, xTo: 74, zMin: -5, zMax: -1, y: LEVELS.concourse, stepsUpIntoConcourse: 4 },   // meets the UNPAID concourse  // to Exits 1 & 2 (white glazed brick subway)
