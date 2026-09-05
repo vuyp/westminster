@@ -1,0 +1,28 @@
+{
+  "name": "westminster-station",
+  "version": "0.1.0",
+  "description": "A highly detailed Three.js walkthrough of Westminster Underground station, London",
+  "scripts": {
+    "start": "http-server . -p 8080 -c-1 -s",
+    "dev": "http-server . -p 8080 -c-1",
+    "test": "node test/run.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuyp/westminster.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vuyp/westminster/issues"
+  },
+  "homepage": "https://github.com/vuyp/westminster#readme",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "type": "module",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

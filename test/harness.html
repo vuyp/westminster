@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Harness</title>
+<link rel="stylesheet" href="../src/styles.css">
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+</script>
+<style>#hud, #start { display: none !important; }</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script type="module">
+// Loads the core + ONE module (?module=world/street or entities/trains) and renders it.
+// ?pos=x,y,z&look=x,y,z  ?lights=0 to disable the default lights  ?fov=70  ?showFloors=1 (draw collision floors)  ?showBlockers=1
+import * as THREE from 'three';
+import { createEngine } from '../src/core/engine.js';
+import { createContext } from '../src/core/context.js';
+import { Collision } from '../src/core/collision.js';
+import { AudioEngine } from '../src/systems/audio.js';
+import { HUD } from '../src/ui/hud.js';
+const params = new URLSearchParams(location.search);
+const app = { ready: false, errors: [], THREE };
+window.__app = app;
+window.addEventListener('error', e => app.errors.push(String(e.message || e)));
+window.addEventListener('unhandledrejection', e => app.errors.push('unhandledrejection: ' + String(e.reason && e.reason.stack || e.reason)));
+const engine = createEngine({ canvas: document.getElementById('view'), quality: params.get('quality') || 'high' });
+const hud = new HUD(); const audio = new AudioEngine({ hud }); const collision = new Collision();
+const ctx = createContext({ scene: engine.scene, collision, audio, hud, quality: params.get('quality') || 'high' });
+ctx.camera = engine.camera; ctx.renderer = engine.renderer; ctx.engine = engine; ctx.stationTime = () => new Date(); ctx.params = params;
+ctx.player = { pos: new THREE.Vector3(), zone: null, train: null, attachTrain() {}, detachTrain() {} };
+Object.assign(app, { engine, scene: engine.scene, camera: engine.camera, ctx, collision, audio });
+const mods = (params.get('module') || '').split(',').filter(Boolean);
+for (const m of mods) {
+  try { const mod = await import(`../src/${m}.js`); const r = await mod.build(ctx); app[m] = r; console.log('[harness] built', m); }
+  catch (e) { console.error('[harness] build failed', m, e); app.errors.push(`${m}: ${e && e.stack || e}`); }
+}
+if (params.get('lights') !== '0') { let has = false; engine.scene.traverse(o => { if (o.isLight) has = true; }); if (!has) { engine.scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x555555, 1.6)); const d = new THREE.DirectionalLight(0xffffff, 1.5); d.position.set(30, 60, 20); engine.scene.add(d); } }
+if (params.get('showFloors') === '1') { const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true }); for (const f of collision.floors) { if (f.kind === 'flat') { const g = new THREE.BoxGeometry(f.xMax - f.xMin, 0.05, f.zMax - f.zMin); const mm = new THREE.Mesh(g, mat); mm.position.set((f.xMin + f.xMax) / 2, f.y, (f.zMin + f.zMax) / 2); engine.scene.add(mm); } else { const g = new THREE.BoxGeometry(f.halfWidth * 2, 0.05, f.len); const mm = new THREE.Mesh(g, mat); mm.position.set((f.ax + f.bx) / 2, (f.ya + f.yb) / 2, (f.az + f.bz) / 2); mm.rotation.y = Math.atan2(f.dx, f.dz); mm.rotation.x = -Math.atan2(f.yb - f.ya, f.len); engine.scene.add(mm); } } }
+if (params.get('showBlockers') === '1') { const mat = new THREE.MeshBasicMaterial({ color: 0xff4444, wireframe: true }); for (const b of collision.blockers) { const s = b.getSize(new THREE.Vector3()); const c = b.getCenter(new THREE.Vector3()); const mm = new THREE.Mesh(new THREE.BoxGeometry(s.x, s.y, s.z), mat); mm.position.copy(c); engine.scene.add(mm); } }
+function setView(pos, look, fov) { engine.camera.position.set(...pos); engine.camera.lookAt(new THREE.Vector3(...look)); if (fov) { engine.camera.fov = fov; engine.camera.updateProjectionMatrix(); } ctx.player.pos.set(pos[0], pos[1] - 1.6, pos[2]); }
+app.setView = setView;
+if (params.get('pos')) setView(params.get('pos').split(',').map(Number), (params.get('look') || '0,1.6,-10').split(',').map(Number), Number(params.get('fov') || 0) || null);
+app.advance = (seconds, step = 1 / 30) => { let t = 0; while (t < seconds) { const dt = Math.min(step, seconds - t); ctx._update(dt, engine.clock.getElapsedTime() + t); t += dt; } };
+app.stats = () => ({ calls: engine.renderer.info.render.calls, triangles: engine.renderer.info.render.triangles, lights: ctx.lights.count, floors: collision.floors.length, blockers: collision.blockers.length });
+let last = performance.now(); let frames = 0;
+function frame() { requestAnimationFrame(frame); const now = performance.now(); const dt = Math.min(0.1, (now - last) / 1000); last = now; ctx._update(dt, engine.clock.getElapsedTime()); engine.render(); frames++; app.frames = frames; }
+frame(); app.ready = true;
+</script>
+</body>
+</html>
