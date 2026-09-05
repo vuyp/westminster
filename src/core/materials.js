@@ -93,8 +93,10 @@ export const M = {
   sandstone() { return cached('sandstone', () => applyTiling(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), T.ashlar({ color: 0xcdbfa3, dark: 0x8d7f65, weathering: 0.3, courseH: 0.6, blockW: 1.2, seed: 55 }))); },
   /** Bronze / dark patinated metal (Portcullis House roof & chimneys, bridge ironwork detail). */
   bronze(color = 0x4a3f2f) { return cached('bronze:' + color, () => new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.8 })); },
-  /** Perforated metal ceiling panels. */
-  perforated() { return cached('perforated', () => applyTiling(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.4 }), T.perforated())); },
+  /** Perforated metal panels (ceilings, wall cladding). Optional tint. */
+  perforated(color = 0xdadcde) { return cached('perforated:' + color, () => applyTiling(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.4 }), T.perforated({ color }))); },
+  /** Victorian engineering brick (1868 cut-and-cover tunnels): stretcher bond, soot-darkened. */
+  brick({ color = 0x6b4a3a, mortar = 0x8a8078, courseH = 0.075, blockW = 0.225, weathering = 0.7 } = {}) { return cached(`brick:${color}:${mortar}:${courseH}:${blockW}`, () => applyTiling(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, normalScale: new THREE.Vector2(0.6, 0.6) }), T.ashlar({ color, dark: mortar, courseH, blockW, weathering, metres: 2, seed: 61 }))); },
   /** Seat moquette. */
   moquette(style = 'barman') { return cached('moquette:' + style, () => applyTiling(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), T.moquette({ style }))); },
   /** Emissive luminaire surface (fluorescent tube diffusers, LED panels). */

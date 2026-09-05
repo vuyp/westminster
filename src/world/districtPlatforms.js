@@ -121,7 +121,7 @@ export function build(ctx) {
     const top = worldToDc(e.top.x, e.top.z), bot = worldToDc(e.bottom.x, e.bottom.z);
     const dirS = Math.sign(bot.s - top.s) || -1; const rise = e.top.y - e.bottom.y, plan = Math.hypot(bot.s - top.s, bot.t - top.t);
     const open = Math.min(plan, 2.4 / (rise / plan) + 0.4);
-    const lanesT = (e.lanes || [0]).map(l => top.t + l * dirS);
+    const lanesT = [...(e.lanes || [0]), ...(e.stair && e.stairLane != null ? [e.stairLane] : [])].map(l => top.t + l * dirS);   // fixed stair alongside shares the pit
     return { name, top, dirS, rect: R(top.s, top.s + dirS * open, Math.min(...lanesT) - 0.65, Math.max(...lanesT) + 0.65), lanesT, e };
   }
   const wellC = wellFor('c'), wellD = wellFor('d');

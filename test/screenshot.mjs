@@ -28,7 +28,7 @@ try {
     if (opt.advance) await page.evaluate(n => window.__app.advance(n), Number(opt.advance));
     for (const v of views) {
       if (opt.views) { const [x, y, z] = v.pos.split(',').map(Number); const [lx, ly, lz] = v.look.split(',').map(Number); await page.evaluate(([x, y, z, lx, ly, lz]) => { const p = window.__app.player; p.teleport(x, y, z); p.lookAt(new window.__app.THREE.Vector3(lx, ly, lz)); p.updateCamera(0); }, [x, y, z, lx, ly, lz]); await page.waitForTimeout(400); }
-      const file = opt.out && !opt.views ? opt.out : path.join(outdir, `${v.name}.png`); await page.screenshot({ path: file }); console.log('wrote', file);
+      const file = opt.out && !opt.views ? opt.out : path.join(outdir, `${v.name}.png`); await page.screenshot({ path: file, timeout: 300000 }); console.log('wrote', file);
     }
     const stats = await page.evaluate(() => window.__app.stats ? window.__app.stats() : null); console.log('stats', JSON.stringify(stats));
     const ft = await page.evaluate(() => { const f = window.__app.frameTimes || []; f.sort((a, b) => a - b); return f.length ? { median: f[f.length >> 1].toFixed(1), p90: f[Math.floor(f.length * 0.9)].toFixed(1), n: f.length } : null; }); console.log('frame ms (swiftshader, not representative of a GPU):', JSON.stringify(ft));
@@ -42,7 +42,7 @@ try {
     for (const v of views) {
       await page.evaluate(([pos, look, fov]) => window.__app.setView(pos.split(',').map(Number), look.split(',').map(Number), fov), [v.pos, v.look, Number(opt.fov || 0) || null]);
       await page.waitForTimeout(300);
-      const file = opt.out && !opt.views ? opt.out : path.join(outdir, `${v.name}.png`); await page.screenshot({ path: file }); console.log('wrote', file);
+      const file = opt.out && !opt.views ? opt.out : path.join(outdir, `${v.name}.png`); await page.screenshot({ path: file, timeout: 300000 }); console.log('wrote', file);
     }
     const stats = await page.evaluate(() => window.__app.stats()); console.log('stats', JSON.stringify(stats));
   }

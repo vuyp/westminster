@@ -97,11 +97,13 @@ class TrainService {
     const line = t.destination.line === 'circle' ? 'circle' : t.line.svc.line; const dir = t.line.def.direction;
     const set = this.ann.TRAIN_ANNOUNCEMENTS[line] && this.ann.TRAIN_ANNOUNCEMENTS[line][dir]; if (!set) return null;
     let v = set[key]; if (typeof v === 'function') v = v(t.destination.name); if (Array.isArray(v)) v = v.join(' ');
+    if (typeof v === 'string' && !v.trim()) return '';   // explicit empty = nothing spoken (e.g. S7 door close is beeps only)
     return v || null;
   }
 
   _announceOnTrain(t, key, extra = {}) {
-    const text = this._text(key, t) || DEFAULT_ANNOUNCEMENTS[key] && DEFAULT_ANNOUNCEMENTS[key](t); if (!text) return;
+    const own = this._text(key, t); if (own === '') return;
+    const text = own || (DEFAULT_ANNOUNCEMENTS[key] && DEFAULT_ANNOUNCEMENTS[key](t)); if (!text) return;
     const aboard = this.ctx.player && this.ctx.player.train === t.train;
     if (t.train.setDisplay && extra.display !== false) t.train.setDisplay(extra.display || text.split('.')[0]);
     this.ctx.audio.announce(text, { voice: 'train', at: aboard ? null : t.train.group, radius: aboard ? Infinity : 4, priority: aboard ? 2 : 0 });

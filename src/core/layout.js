@@ -57,7 +57,7 @@ export const STREET = {
   entranceMain: { x: 0, z: -3, width: 12 },      // Exit 4 'Bridge Street': 12 m opening in the arcade; passage north, lift on the west, 16 steps down
   exit3: { x: 46, z: 29, width: 4 },             // Exit 3 'Houses of Parliament': subway stair on the SOUTH pavement at the foot of Big Ben
   exit2: { x: 76, z: -10, width: 4 },            // Exit 2 'Victoria Embankment': stair at the NW corner of the bridge, by Boadicea (cast-iron arch canopy)
-  exit1: { x: 80, z: -16, width: 3 },            // Exit 1 'Westminster Pier': ramp/4 steps onto the river wall pavement
+  exit1: { x: 80, z: -16, width: 3, stairs: true },   // Exit 1 'Westminster Pier': stair onto the river wall pavement (a ramp cannot fit the 4.3 m rise)
   exit5: { x: -75, z: -18, width: 3 },           // Exit 5 'Whitehall': stair, east footway of Parliament Street
   exit6: { x: -107, z: -20, width: 3 },          // Exit 6 'Parliament Street / Whitehall': west footway, HM Treasury
   busStop: { x: -24, z: 4, ref: 'H' },
@@ -97,15 +97,15 @@ export const TICKET_HALL = {
   entrancePassage: { xMin: -5, xMax: 5, zMin: -6.5, zMax: -3, y: 0 },              // street level, between Tesco Express (W) and Caffè Nero (E)
   mainStairs: { xMin: -4.5, xMax: 3.5, zTop: -6.5, zBottom: -13.5, yTop: LEVELS.street, yBottom: LEVELS.concourse, steps: 16 },   // descends NORTH
   streetLift: { x: -8, z: -8 },                                                       // arcade ↔ concourse, west of the passage
-  ticketWindows: { x: -45, zMin: -28, zMax: -14, facing: 'east' },                   // former ticket office, NW/west wall (blank, Tensa barriers)
-  ticketMachines: { x: -45, zMin: -12, zMax: -2, count: 5, facing: 'east' },         // flush in the wall near the gateline
-  cashMachines: { x: -45, zMin: -38, zMax: -30, count: 4, facing: 'east' },
+  ticketWindows: { x: -45, zMin: -38, zMax: -26, facing: 'east' },                   // former ticket office, NW/west wall (blank, Tensa barriers)
+  ticketMachines: { x: -45, zMin: -15, zMax: -10, count: 5, facing: 'east' },         // flush in the wall near the gateline
+  cashMachines: { z: -40, xMin: -32, xMax: -22, count: 4, facing: 'south' },   // on the north wall
   payphones: { x: 20, z: 11, count: 4 },
   // Gateline: runs NW–SE across the middle of the hall. Paid side is to the NORTH-EAST of the line.
-  gateline: { from: [-34, -34], to: [14, -16], gates: 15, wideGateIndex: 0, boothAt: 'se' },
+  gateline: { from: [-13, -26], to: [0, -21], gates: 15, wideGateIndex: 0, boothAt: 'se' },   // c. 14 m for 15 gates
   // Bank (a) escalators leave the paid side from the east end of its south side (see ESCALATORS)
   // Openings in the concourse floor for the D&C stairs are given in DISTRICT.stairs (world rects precomputed below)
-  embankmentPassage: { xFrom: 48, xTo: 74, zMin: -16, zMax: -10, y: LEVELS.concourse, stepsUpIntoConcourse: 4 },  // to Exits 1 & 2 (white glazed brick subway)
+  embankmentPassage: { xFrom: 48, xTo: 74, zMin: -5, zMax: -1, y: LEVELS.concourse, stepsUpIntoConcourse: 4 },   // meets the UNPAID concourse  // to Exits 1 & 2 (white glazed brick subway)
   whitehallPassage: { xFrom: -45, xTo: -75, zMin: -24, zMax: -18, y: LEVELS.concourse },                          // to Exits 5 & 6 (toilets in the far passage)
   bridgeStreetSubway: { xMin: -45, xMax: 48, zMin: 2, zMax: 8, y: LEVELS.concourse },                              // strip under the road; Exit 3 leaves from its east end
   exit3Passage: { xMin: 44, xMax: 48, zFrom: 8, zTo: 26, y: LEVELS.concourse, stairsTop: [46, 29] },              // south under Bridge Street to the Big Ben pavement
@@ -139,7 +139,7 @@ export const DISTRICT = {
     1: { number: 1, direction: 'westbound', side: 'se', tMin: 3.7, tMax: 8.7, edgeT: 3.7, lines: ['District', 'Circle'], towards: ["St. James's Park", 'Victoria', 'Wimbledon', 'Richmond', 'Ealing Broadway', 'Edgware Road via Victoria'],
          wideWestEnd: { sMin: -50, sMax: -22, tMax: 14 } },                              // widens at its west end: concourse steps, deep lift, bank (d)
     2: { number: 2, direction: 'eastbound', side: 'nw', tMin: -8.7, tMax: -3.7, edgeT: -3.7, lines: ['District', 'Circle'], towards: ['Embankment', 'Tower Hill', 'Upminster', 'Circle via Tower Hill'],
-         recesses: [{ sMin: -44, sMax: -34, tMin: -12 }, { sMin: -30, sMax: -18, tMin: -12 }] },  // concourse steps from the first, bank (c) from the second
+         recesses: [{ sMin: -44, sMax: -34, tMin: -12 }, { sMin: -30, sMax: -18, tMin: -13.5 }] },   // second recess is deeper: bank (c) + its fixed stair (stairLane 1.6)  // concourse steps from the first, bank (c) from the second
   },
   tracks: { eastbound: { t: -1.9 }, westbound: { t: 1.9 } },    // left-hand running: eastbound on the NW track
   trackGauge: 1.435,
@@ -200,12 +200,12 @@ const pD = dcp(-26, 10.5), pDb = dcp(-26 - 5.5 * RUN, 10.5);     // bank (d) alo
 const ESC = (name, top, bottom, dir, lanes, extra = {}) => ({ name, top, bottom, dir, lanes, ...extra });
 export const ESCALATORS = [
   ESC('a', { x: 42, y: LEVELS.concourse, z: -8 }, { x: 42 - 5.9 * RUN, y: LEVELS.interchangeEast, z: -8 }, 'down', [-1.4, 0, 1.4], { from: 'concourse', to: 'interchangeEast', note: 'concourse (paid, east end of the south side) → interchange EAST' }),
-  ESC('b', { x: 12, y: LEVELS.interchangeEast, z: -24 }, { x: 12 - 13.5 * RUN, y: LEVELS.jubUpper, z: -24 }, 'down', [-1.4, 0, 1.4], { from: 'interchangeEast', to: 'wellWestUpper', note: 'the long flight: interchange EAST → Platform 3 WEST well, descending westward across the void' }),
-  ESC('c', { x: pC.x, y: LEVELS.dcPlatform, z: pC.z }, { x: pCb.x, y: LEVELS.interchangeWest, z: pCb.z }, 'down', [-1.4, 0], { from: 'dcPlatform2', to: 'interchangeWest', stair: true, note: 'D&C Platform 2 (eastbound) recess → interchange WEST, with a fixed stair alongside' }),
+  ESC('b', { x: 12, y: LEVELS.interchangeEast, z: -8 }, { x: 12 - 13.5 * RUN, y: LEVELS.jubUpper, z: -8 }, 'down', [-1.4, 0, 1.4], { from: 'interchangeEast', to: 'wellWestUpper', note: 'the long flight: interchange EAST → Platform 3 WEST well, descending westward across the void (south side, clear of the D&C structure)' }),
+  ESC('c', { x: pC.x, y: LEVELS.dcPlatform, z: pC.z }, { x: pCb.x, y: LEVELS.interchangeWest, z: pCb.z }, 'down', [-1.4, 0], { from: 'dcPlatform2', to: 'interchangeWest', stair: true, stairLane: 1.6, note: 'D&C Platform 2 (eastbound) recess → interchange WEST, with a fixed stair alongside' }),
   ESC('d', { x: pD.x, y: LEVELS.dcPlatform, z: pD.z }, { x: pDb.x, y: LEVELS.interchangeWest, z: pDb.z }, 'down', [-1.4, 0], { from: 'dcPlatform1', to: 'interchangeWest', note: 'D&C Platform 1 (westbound) wide west end → interchange WEST' }),
-  ESC('e', { x: -8, y: LEVELS.interchangeWest, z: -8 }, { x: -8 + 9 * RUN, y: LEVELS.jubUpper, z: -8 }, 'down', [-1.4, 0, 1.4], { from: 'interchangeWest', to: 'wellEastUpper', note: 'interchange WEST → Platform 3 EAST well, descending eastward across the void (crosses bank b)' }),
-  ESC('f', { x: -12, y: LEVELS.jubUpper, z: -25 }, { x: -12 - 9.5 * RUN, y: LEVELS.jubLower, z: -25 }, 'down', [-1.4, 0], { from: 'wellWestUpper', to: 'wellWestLower', stair: true, note: 'WEST well: Platform 3 level → Platform 4 level, stair alongside (z ≈ -21)' }),
-  ESC('g', { x: 12, y: LEVELS.jubUpper, z: -25 }, { x: 12 + 9.5 * RUN, y: LEVELS.jubLower, z: -25 }, 'down', [0, 1.4], { from: 'wellEastUpper', to: 'wellEastLower', stair: true, note: 'EAST well: Platform 3 level → Platform 4 level, stair alongside (z ≈ -21)' }),
+  ESC('e', { x: -8, y: LEVELS.interchangeWest, z: -24 }, { x: -8 + 9 * RUN, y: LEVELS.jubUpper, z: -24 }, 'down', [-1.4, 0, 1.4], { from: 'interchangeWest', to: 'wellEastUpper', note: 'interchange WEST → Platform 3 EAST well, descending eastward across the void (north side; crosses bank b in plan)' }),
+  ESC('f', { x: -12, y: LEVELS.jubUpper, z: -25 }, { x: -12 - 9.5 * RUN, y: LEVELS.jubLower, z: -25 }, 'down', [-1.4, 0], { from: 'wellWestUpper', to: 'wellWestLower', stair: true, stairLane: -4.0, note: 'WEST well: Platform 3 level → Platform 4 level, stair alongside (z ≈ -21)' }),
+  ESC('g', { x: 12, y: LEVELS.jubUpper, z: -25 }, { x: 12 + 9.5 * RUN, y: LEVELS.jubLower, z: -25 }, 'down', [0, 1.4], { from: 'wellEastUpper', to: 'wellEastLower', stair: true, stairLane: 4.0, note: 'EAST well: Platform 3 level → Platform 4 level, stair alongside (z ≈ -21)' }),
 ];
 
 // Flat slabs in the box that the player walks on (besides escalator landings). The box module builds and registers them.

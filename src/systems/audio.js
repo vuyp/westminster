@@ -101,7 +101,7 @@ export class AudioEngine {
       const target = name === type ? r.spec.wet : 0;
       r.gain.gain.cancelScheduledValues(t); r.gain.gain.setTargetAtTime(target, t, ramp / 3);
     }
-    for (const [bedZone, bed] of this.beds) bed.setActive(bedZone === type || (Array.isArray(bed.zones) && bed.zones.includes(type)), immediate);
+    for (const [, bed] of this.beds) bed.setActive(bed.zones.includes(type), immediate);
   }
 
   /** Register a synth factory: (ctx, params) => { output: AudioNode, start(), stop(), set?(k,v) } */
@@ -116,8 +116,8 @@ export class AudioEngine {
   }
 
   /** Looping ambience bed for a zone (not spatialised). zones: string | string[] */
-  bed(zone, synthName, params = {}, gain = 0.5) {
-    const b = new Bed(this, zone, synthName, params, gain); this.beds.set(Array.isArray(zone) ? zone[0] : zone, b); if (this.ctx) b._connect(); return b;
+  bed(zone, synthName, params = {}, gain = 0.5, { key = null } = {}) {
+    const b = new Bed(this, zone, synthName, params, gain); const k = key || `${Array.isArray(zone) ? zone.join('+') : zone}:${synthName}:${this.beds.size}`; this.beds.set(k, b); if (this.ctx) b._connect(); return b;
   }
 
   /** One-shot sound at a position (or non-positional if no position). Returns the synth instance. */
@@ -150,12 +150,12 @@ export class AudioEngine {
    * opts: { voice: 'train'|'station'|'pa', at: Vector3|Object3D (audibility check), radius, priority, onEnd }
    * Returns a promise resolved when finished (or skipped).
    */
-  announce(text, { voice = 'station', at = null, radius = 40, priority = 0, caption = true, rate = 1.0, pitch = 1.0, onStart = null, onEnd = null } = {}) {
+  announce(text, { voice = 'station', at = null, radius = 40, priority = 0, caption = true, rate = 1.0, pitch = 1.0, gender = 'female', voiceName = null, onStart = null, onEnd = null } = {}) {
     return new Promise(resolve => {
       const pos = at ? (at.isObject3D ? at.getWorldPosition(new THREE.Vector3()) : at) : null;
       const audible = !pos || pos.distanceTo(this.listenerPos) <= radius;
       if (!audible) { resolve(false); return; }
-      this.speechQueue.push({ text, voice, priority, caption, rate, pitch, onStart, onEnd, resolve, pos });
+      this.speechQueue.push({ text, voice, priority, caption, rate, pitch, gender, voiceName, onStart, onEnd, resolve, pos });
       this.speechQueue.sort((a, b) => b.priority - a.priority);
       this._pumpSpeech();
     });
@@ -175,9 +175,14 @@ export class AudioEngine {
       try {
         const u = new SpeechSynthesisUtterance(item.text);
         const voices = speechSynthesis.getVoices();
-        const pick = voices.find(v => /en[-_]GB/i.test(v.lang) && /female|hazel|susan|kate|serena|google uk english female/i.test(v.name)) || voices.find(v => /en[-_]GB/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+        const gb = voices.filter(v => /en[-_]GB/i.test(v.lang));
+        const male = v => /male|daniel|george|ryan|arthur|oliver|google uk english male/i.test(v.name) && !/female/i.test(v.name);
+        const female = v => /female|hazel|susan|kate|serena|libby|sonia|google uk english female/i.test(v.name);
+        const pick = (item.voiceName && voices.find(v => v.name === item.voiceName))
+          || (item.gender === 'male' ? (gb.find(male) || voices.find(v => /^en/i.test(v.lang) && male(v))) : (gb.find(female) || gb.find(v => !male(v))))
+          || gb[0] || voices.find(v => /^en/i.test(v.lang));
         if (pick) u.voice = pick;
-        u.lang = 'en-GB'; u.rate = item.rate * (item.voice === 'train' ? 0.98 : 0.95); u.pitch = item.pitch * (item.voice === 'train' ? 1.05 : 0.95);
+        u.lang = 'en-GB'; u.rate = item.rate * (item.voice === 'train' ? 0.98 : 0.95); u.pitch = item.pitch * (item.voice === 'train' ? 1.05 : 0.95) * (item.gender === 'male' && !(pick && male(pick)) ? 0.75 : 1);
         u.volume = pos ? Math.max(0.15, 1 - pos.distanceTo(this.listenerPos) / 45) : 0.9;
         let ended = false; const done = () => { if (!ended) { ended = true; finish(); } };
         u.onend = done; u.onerror = done;
@@ -376,7 +381,7 @@ export class AudioEngine {
     this.registerSynth('footstep', (c, { surface = 'hard', run = false } = {}) => {
       const out = c.createGain(); out.gain.value = run ? 0.7 : 0.5; const t0 = c.currentTime; const n = noiseSource(c);
       const f = c.createBiquadFilter(); f.type = 'bandpass';
-      const prof = { hard: [1400, 1.2, 0.08], granite: [1800, 1.5, 0.07], metal: [2600, 2.5, 0.12], stairs: [1200, 1.0, 0.09], pavement: [900, 0.9, 0.1], carpet: [400, 0.5, 0.1], train: [700, 0.9, 0.11], escalator: [2200, 2.0, 0.09] }[surface] || [1400, 1.2, 0.08];
+      const prof = { hard: [1400, 1.2, 0.08], granite: [1800, 1.5, 0.07], metal: [2600, 2.5, 0.12], stairs: [1200, 1.0, 0.09], pavement: [900, 0.9, 0.1], carpet: [400, 0.5, 0.1], train: [700, 0.9, 0.11], escalator: [2200, 2.0, 0.09], gravel: [3200, 0.6, 0.14], ballast: [3200, 0.6, 0.14], suregrip: [2400, 1.8, 0.1], terrazzo: [1700, 1.4, 0.07], grass: [500, 0.6, 0.12] }[surface] || [1400, 1.2, 0.08];
       f.frequency.value = prof[0] * (0.9 + Math.random() * 0.2); f.Q.value = prof[1]; const g = c.createGain(); env(g.gain, t0, 0.003, prof[2], 0.001, 0.6);
       n.connect(f); f.connect(g); g.connect(out);
       const th = c.createOscillator(); th.frequency.value = 90; const tg = c.createGain(); env(tg.gain, t0, 0.002, 0.05, 0.001, 0.25); th.connect(tg); tg.connect(out);
