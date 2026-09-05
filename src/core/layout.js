@@ -260,6 +260,7 @@ export const ZONES = [
   { id: 'jubileePlatformLower', name: 'Jubilee line — platform 4 (westbound)', reverb: 'subsurface', box: jubZone(LEVELS.jubLower) },
   { id: 'dcPlatform1', name: 'District & Circle lines — platform 1 (westbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: 1.9, tMax: 15, yMin: LEVELS.dcPlatform - 0.6, yMax: LEVELS.dcCeiling } },
   { id: 'dcPlatform2', name: 'District & Circle lines — platform 2 (eastbound)', reverb: 'subsurface', rect: { sMin: -68, sMax: 68, tMin: -15, tMax: -1.9, yMin: LEVELS.dcPlatform - 0.6, yMax: LEVELS.dcCeiling } },
+  { id: 'jubileeStairs', name: 'Jubilee line — emergency stairs', reverb: 'subsurface', box: { xMin: -64, xMax: -49, zMin: -3.5, zMax: 1.5, yMin: LEVELS.jubLower - 1, yMax: LEVELS.jubUpper + 3.5 } },
   { id: 'box', name: 'Jubilee line escalators', reverb: 'box', box: { xMin: -41, xMax: 45, zMin: -30, zMax: 16, yMin: LEVELS.boxFloor - 1, yMax: LEVELS.boxTop - 0.4 } },
   { id: 'ticketHall', name: 'Westminster — ticket hall', reverb: 'hall', box: { xMin: -53, xMax: 49, zMin: -41, zMax: 20, yMin: LEVELS.concourse - 0.6, yMax: LEVELS.concourseCeiling + 0.6 } },
   { id: 'subway', name: 'Westminster station — subway', reverb: 'hall', box: { xMin: -110, xMax: 84, zMin: -30, zMax: 30, yMin: LEVELS.concourse - 0.6, yMax: -0.2 } },
@@ -285,6 +286,7 @@ export const PALETTE = {
   terrazzoLight: 0xc8c8c3,     // Jubilee platform floor
   dcFloor: 0xc9c7c0,           // D&C platform floor tiles
   tactileDark: 0x5a5a58,       // dark studded tactile strip with white MIND THE GAP
+  tactileGrey: 0x8f9194,
   graniteFloor: 0x55575a,
   jubileePanel: 0xb8bbbe,      // perforated aluminium tunnel panels
   jubileeRib: 0x6e7174,
